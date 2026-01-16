@@ -39,10 +39,10 @@
   // 2. VISITOR ID & LOGGING
   let visitorId;
   try {
-    visitorId = localStorage.getItem('chat_visitor_id');
+    visitorId = sessionStorage.getItem('chat_visitor_id');
     if (!visitorId) {
       visitorId = 'visitor_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('chat_visitor_id', visitorId);
+      sessionStorage.setItem('chat_visitor_id', visitorId);
     }
   } catch (e) {
     visitorId = 'visitor_' + Math.random().toString(36).substr(2, 9);
