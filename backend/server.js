@@ -6,6 +6,11 @@ const { Server } = require('socket.io');
 const path = require('path');
 const crypto = require('crypto'); // For generating IDs
 
+const scraper = require('./scraper');
+
+// Scraped Knowledge Store
+let siteKnowledgeStore = new Map();
+
 // Initialize Groq
 const Groq = require('groq-sdk');
 // Handle the variable name the user actually used (GEMINI_API_KEY) or standard AI_API_KEY or GROQ_API_KEY
@@ -33,6 +38,15 @@ app.use('/widget', express.static(path.join(__dirname, '../widget')));
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../demo.html'));
 });
+
+// Start Scraper on Launch
+const scrapeUrls = process.env.SCRAPE_URLS || process.env.SCRAPE_URL;
+if (scrapeUrls) {
+    scraper.scrapeSites(scrapeUrls).then(data => {
+        siteKnowledgeStore = data;
+        console.log('[Scraper] Knowledge base ready for domains:', [...siteKnowledgeStore.keys()]);
+    });
+}
 
 // --- IN-MEMORY STORAGE ---
 // NOTE: This data is lost when the server restarts.
@@ -142,20 +156,48 @@ Your response format:
 - Website-based answer completely formatted with markdown (bullets, bolding, paragraphs) OR
 - Website not found message + global answer (also formatted nicely).`;
 
+            let scrapedContext = "";
+            let currentUrl = "";
+
             if (siteContext) {
                 try {
                     const contextObj = typeof siteContext === 'string' ? JSON.parse(siteContext) : siteContext;
+
+                    // Extract URL to find matching scraped data
+                    if (contextObj.pageContent && contextObj.pageContent.url) {
+                        try {
+                            currentUrl = contextObj.pageContent.url;
+                            let domain = new URL(currentUrl).hostname;
+                            domain = domain.replace(/^www\./, '');
+
+                            // Check our Knowledge Store
+                            if (siteKnowledgeStore.has(domain)) {
+                                scrapedContext = siteKnowledgeStore.get(domain);
+                                console.log(`[AI] Using scraped context for domain: ${domain}`);
+                            }
+                        } catch (e) {
+                            // URL parse error
+                        }
+                    }
+
                     if (Object.keys(contextObj).length > 0) {
-                        systemPrompt += "\n\nWEBSITE CONTENT:\n" + JSON.stringify(contextObj, null, 2);
+                        systemPrompt += "\n\nWEBSITE VISIBLE CONTENT (Current Page):\n" + JSON.stringify(contextObj, null, 2);
                     } else {
-                        systemPrompt += "\n\nWEBSITE CONTENT: (Empty)";
+                        systemPrompt += "\n\nWEBSITE VISIBLE CONTENT: (Empty)";
                     }
                 } catch (e) {
                     console.error('Error parsing siteContext in server:', e);
-                    systemPrompt += "\n\nWEBSITE CONTENT: (Error parsing content)";
+                    systemPrompt += "\n\nWEBSITE VISIBLE CONTENT: (Error parsing content)";
                 }
             } else {
-                systemPrompt += "\n\nWEBSITE CONTENT: (None provided)";
+                systemPrompt += "\n\nWEBSITE VISIBLE CONTENT: (None provided)";
+            }
+
+            // ADD SCRAPED KNOWLEDGE BASE
+            if (scrapedContext) {
+                systemPrompt += `\n\nWEBSITE KNOWLEDGE BASE (General Info for ${currentUrl}):\n` + scrapedContext;
+            } else {
+                systemPrompt += "\n\nWEBSITE KNOWLEDGE BASE: (No scraped data found for this domain)";
             }
 
             try {
