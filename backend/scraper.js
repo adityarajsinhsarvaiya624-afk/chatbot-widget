@@ -1,97 +1,125 @@
-const https = require('https');
-const http = require('http');
+const axios = require('axios');
+const cheerio = require('cheerio');
 
-// Simple regex-based HTML text extractor
-function extractTextConfig(html) {
-    if (!html) return '';
-    let text = html.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gmi, ' ');
-    text = text.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gmi, ' ');
-    text = text.replace(/<[^>]+>/g, ' ');
-    text = text.replace(/&nbsp;/g, ' ');
-    text = text.replace(/\s+/g, ' ').trim();
-    return text.substring(0, 15000); // 15kb per page max
-}
+// Configuration
+const MAX_PAGES = 150; // Limit pages to avoid long wait times
+const TIMEOUT_MS = 10000;
 
-// Find all internal links
-function extractLinks(html, baseUrl) {
+// Helper: Sleep
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Extract text and links using Cheerio
+ */
+function processHtml(html, baseUrl) {
+    const $ = cheerio.load(html);
+
+    // Remove clutter
+    $('script, style, noscript, iframe, svg, header, footer, nav').remove();
+
+    // Extract Text
+    let text = $('body').text();
+    text = text.replace(/\s+/g, ' ').trim(); // Normalize whitespace
+
+    // Extract Links
     const links = new Set();
-    const regex = /href=["']([^"']+)["']/g;
-    let match;
     const baseHostname = new URL(baseUrl).hostname;
 
-    while ((match = regex.exec(html)) !== null) {
+    $('a').each((i, el) => {
         try {
-            let link = match[1];
-            // Resolve relative links
-            const absoluteUrl = new URL(link, baseUrl).href;
-            const absoluteHostname = new URL(absoluteUrl).hostname;
+            const href = $(el).attr('href');
+            if (!href) return;
 
-            // Only internal links
-            if (absoluteHostname === baseHostname) {
-                // Filter out useless files
-                if (!absoluteUrl.match(/\.(jpg|png|pdf|css|js|zip)$/i)) {
-                    links.add(absoluteUrl);
-                }
+            const absoluteUrl = new URL(href, baseUrl).href;
+            const linkHostname = new URL(absoluteUrl).hostname;
+
+            // Internal links only, ignore files
+            if (linkHostname === baseHostname && !absoluteUrl.match(/\.(jpg|jpeg|png|gif|pdf|zip|css|js)$/i)) {
+                // Remove anchors/hashes
+                const cleanUrl = absoluteUrl.split('#')[0];
+                links.add(cleanUrl);
             }
         } catch (e) { }
-    }
-    return Array.from(links);
-}
-
-async function fetchPage(url) {
-    return new Promise((resolve, reject) => {
-        const client = url.startsWith('https') ? https : http;
-        client.get(url, (res) => {
-            let data = '';
-            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                return fetchPage(res.headers.location).then(resolve).catch(reject);
-            }
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => resolve(data));
-        }).on('error', (err) => reject(err));
     });
+
+    return { text: text.substring(0, 20000), links: Array.from(links) };
 }
 
-// Cralwer State
-const MAX_PAGES = 50; // Increased limit to cover more extensions
-const visited = new Set();
-let aggregatedText = "";
+/**
+ * Fetch with Axios (Fast Mode)
+ */
+async function fetchWithAxios(url) {
+    try {
+        const response = await axios.get(url, {
+            timeout: TIMEOUT_MS,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+        });
 
+        // Basic check if it's likely a SPA/Empty page
+        if (response.data.length < 500 || response.data.includes('You need to enable JavaScript')) {
+            throw new Error('Likely Dynamic Content');
+        }
+
+        return { html: response.data, method: 'axios' };
+    } catch (e) {
+        throw e;
+    }
+}
+
+/**
+ * Main Crawl Function
+ */
 async function crawlSite(startUrl) {
-    aggregatedText = "";
-    visited.clear();
+    const chunks = [];
+    const visited = new Set();
     const queue = [startUrl];
     let count = 0;
 
-    console.log(`[Crawler] Starting crawl of ${startUrl}`);
+    console.log(`[Crawler] Starting lightweight crawl of ${startUrl}`);
 
     while (queue.length > 0 && count < MAX_PAGES) {
         const url = queue.shift();
-        if (visited.has(url)) continue;
-        visited.add(url);
+
+        const normalizedUrl = url.replace(/\/$/, "");
+        if (visited.has(normalizedUrl)) continue;
+        visited.add(normalizedUrl);
+
+        count++;
+        console.log(`[Crawler] Visiting (${count}/${MAX_PAGES}): ${url}`);
+
+        let html = "";
+        let method = "";
 
         try {
-            console.log(`[Crawler] Visiting (${count + 1}/${MAX_PAGES}): ${url}`);
-            const html = await fetchPage(url);
-            const text = extractTextConfig(html);
+            const res = await fetchWithAxios(url);
+            html = res.html;
+            method = res.method;
+        } catch (axiosErr) {
+            console.error(`[Crawler] Failed to fetch ${url}: ${axiosErr.message}`);
+        }
 
-            // Add to Context
-            aggregatedText += `\n\n--- PAGE: ${url} ---\n${text}`;
+        if (html) {
+            const { text, links } = processHtml(html, startUrl);
 
-            // Find new links (Depth 1 basically, since we add to queue)
-            const links = extractLinks(html, startUrl);
+            // Add as a chunk
+            if (text.length > 50) {
+                chunks.push({ url, text: text.substring(0, 30000), method }); // Keep a reasonable per-page limit
+            }
+
+            // Add new links to queue
             for (const link of links) {
-                if (!visited.has(link)) {
+                const normLink = link.replace(/\/$/, "");
+                if (!visited.has(normLink)) {
                     queue.push(link);
                 }
             }
-            count++;
-        } catch (e) {
-            console.error(`[Crawler] Failed ${url}: ${e.message}`);
         }
     }
-    console.log(`[Crawler] Finished. Total Pages: ${count}. Total Size: ${aggregatedText.length} chars.`);
-    return aggregatedText;
+
+    console.log(`[Crawler] Finished. Visited: ${count}. Total chunks: ${chunks.length}`);
+    return chunks;
 }
 
 async function scrapeSites(urlsStr) {
@@ -103,14 +131,12 @@ async function scrapeSites(urlsStr) {
     for (const url of urls) {
         try {
             const domain = new URL(url).hostname.replace(/^www\./, '');
-            // Run the Crawler
-            const fullContent = await crawlSite(url);
-            results.set(domain, fullContent);
+            const content = await crawlSite(url);
+            results.set(domain, content);
         } catch (error) {
-            console.error(`[Scraper] Failed to scrape ${url}:`, error.message);
+            console.error(`[Scraper] Fatal error scraping ${url}:`, error.message);
         }
     }
-
     return results;
 }
 

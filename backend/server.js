@@ -7,8 +7,9 @@ const path = require('path');
 const crypto = require('crypto'); // For generating IDs
 
 const scraper = require('./scraper');
+const knowledgeIndex = require('./embeddings');
 
-// Scraped Knowledge Store
+// Scraped Knowledge Store (Mapping of domain -> siteData array)
 let siteKnowledgeStore = new Map();
 
 // Initialize Groq
@@ -42,9 +43,14 @@ app.get('/', (req, res) => {
 // Start Scraper on Launch
 const scrapeUrls = process.env.SCRAPE_URLS || process.env.SCRAPE_URL;
 if (scrapeUrls) {
-    scraper.scrapeSites(scrapeUrls).then(data => {
+    scraper.scrapeSites(scrapeUrls).then(async data => {
         siteKnowledgeStore = data;
-        console.log('[Scraper] Knowledge base ready for domains:', [...siteKnowledgeStore.keys()]);
+        console.log('[Scraper] Raw data ready for domains:', [...siteKnowledgeStore.keys()]);
+
+        // Build the search index for all scraped data
+        for (const [domain, chunks] of siteKnowledgeStore) {
+            await knowledgeIndex.addSiteData(chunks);
+        }
     });
 }
 
@@ -127,34 +133,33 @@ io.on('connection', (socket) => {
 
             // Prepare System Prompt with optional Site Context
             // Strict Behavior Rules for the Chatbot
-            let systemPrompt = `You are an intelligent website-aware chatbot. Your behavior rules are STRICT and must be followed in order:
+            let systemPrompt = `You are an intelligent, website-aware chatbot. Your goal is to be helpful, concise, and professional. 
 
-1. Analyze the website content carefully to see if it directly answers the user's question.
-2. IF the website content contains relevant information:
-   - Answer ONLY using the website content.
-   - **Tone**: Be warm, professional, and helpful. 
-   - **Formatting**:
-     - Use short paragraphs for readability.
-     - Use **bullet points** for lists or steps.
-     - Use **bold text** for key terms or prices.
-   - Do NOT add external knowledge.
-   - Do NOT assume or guess.
-   - Do NOT mention that you are an AI.
-3. IF the website content does NOT contain relevant information:
-   - politely apologize and state that the information is not currently available on the website.
-   - Then answer the question using general/global knowledge if helpful.
-   - Make sure the global answer is strictly accurate and helpful.
-4. When analyzing website content:
-   - Use "pageContent.uiMap" to understand the functionality (buttons, inputs, actions).
-   - Use "pageContent.contentSnippet" for general text/information.
-   - Use "manualContext" for specific business rules or non-visible logic.
-5. NEVER hallucinate website-specific details.
-6. NEVER fabricate contests, offers, events, or prices.
-7. If the question is unclear, ask for clarification politely.
+STRICT BEHAVIOR RULES:
+1. **Ambiguity Detection**: If the user's question is too vague (e.g., "Tell me more", "What are the prices?", "How to start?"), do NOT give a generic answer. Instead:
+   - Look at the "RELEVANT WEBSITE KNOWLEDGE" provided below.
+   - Identify 2-3 specific topics or products found in that context.
+   - Politely ask the user which one they are interested in.
+   - *Example*: "I see we have several services including [Topic A] and [Topic B]. Which one can I help you with today?"
+
+2. **Accurate Answering**: If the question is specific and the information is in the website content:
+   - Answer ONLY using the provided website content.
+   - Keep it warm and professional.
+   - Use **bold text** for key terms and **bullet points** for lists.
+   - Use short paragraphs.
+
+3. **Missing Information**: If the information is NOT in the website content:
+   - State politely that the information isn't on the site.
+   - ONLY then provide a brief, helpful answer using limited general knowledge, but maintain the focus on the website's likely domain.
+
+4. **Style**:
+   - Do NOT mention you are an AI.
+   - Do NOT hallucinate links or prices not found in the context.
+   - If the user asks about something functional (e.g., "How do I login?"), look at the "WEBSITE VISIBLE CONTENT" for UI elements.
 
 Your response format:
-- Website-based answer completely formatted with markdown (bullets, bolding, paragraphs) OR
-- Website not found message + global answer (also formatted nicely).`;
+- Acknowledge specifically (don't just say "I understand").
+- Provide the answer or the clarifying question formatted with markdown.`;
 
             let scrapedContext = "";
             let currentUrl = "";
@@ -167,16 +172,14 @@ Your response format:
                     if (contextObj.pageContent && contextObj.pageContent.url) {
                         try {
                             currentUrl = contextObj.pageContent.url;
-                            let domain = new URL(currentUrl).hostname;
-                            domain = domain.replace(/^www\./, '');
 
-                            // Check our Knowledge Store
-                            if (siteKnowledgeStore.has(domain)) {
-                                scrapedContext = siteKnowledgeStore.get(domain);
-                                console.log(`[AI] Using scraped context for domain: ${domain}`);
-                            }
+                            // SEARCH LOGIC: Instead of full domain context, we search for query-relevant chunks
+                            console.log(`[RAG] Searching knowledge base for: "${content}"`);
+                            const relevantChunks = await knowledgeIndex.search(content, 5);
+                            scrapedContext = knowledgeIndex.formatContext(relevantChunks);
+
                         } catch (e) {
-                            // URL parse error
+                            console.error('[RAG] Search error:', e);
                         }
                     }
 
@@ -193,37 +196,50 @@ Your response format:
                 systemPrompt += "\n\nWEBSITE VISIBLE CONTENT: (None provided)";
             }
 
-            // ADD SCRAPED KNOWLEDGE BASE
+            // ADD SEARCHED KNOWLEDGE BASE
             if (scrapedContext) {
-                systemPrompt += `\n\nWEBSITE KNOWLEDGE BASE (General Info for ${currentUrl}):\n` + scrapedContext;
+                systemPrompt += `\n\nRELEVANT WEBSITE KNOWLEDGE (Found via search):\n` + scrapedContext;
             } else {
-                systemPrompt += "\n\nWEBSITE KNOWLEDGE BASE: (No scraped data found for this domain)";
+                systemPrompt += "\n\nRELEVANT WEBSITE KNOWLEDGE: (No relevant data found for this specific query)";
             }
 
             try {
-                const completion = await groq.chat.completions.create({
+                const stream = await groq.chat.completions.create({
                     messages: [
                         { role: 'system', content: systemPrompt },
                         ...history
                     ],
                     model: 'llama-3.3-70b-versatile',
+                    stream: true,
                 });
 
-                const aiContent = completion.choices[0]?.message?.content || "I'm sorry, I couldn't understand that.";
+                let fullContent = "";
+                const responseId = generateId();
+
+                for await (const chunk of stream) {
+                    const content = chunk.choices[0]?.delta?.content || "";
+                    if (content) {
+                        fullContent += content;
+                        io.to(conversation._id).emit('chat_chunk', {
+                            _id: responseId,
+                            conversationId: conversation._id,
+                            content: content,
+                            sender: 'bot'
+                        });
+                    }
+                }
 
                 const botMessage = {
-                    _id: generateId(),
+                    _id: responseId,
                     conversationId: conversation._id,
                     sender: 'bot',
-                    content: aiContent,
+                    content: fullContent,
                     timestamp: new Date()
                 };
 
-                // Add bot message to store
+                // Add complete bot message to store
                 conversationMsgs.push(botMessage);
-
-                io.to(conversation._id).emit('receive_message', botMessage);
-                console.log(`INFO: AI reply sent: ${botMessage._id}`);
+                console.log(`INFO: AI streaming completed: ${botMessage._id}`);
 
             } catch (aiError) {
                 console.error('Groq API Error:', aiError);

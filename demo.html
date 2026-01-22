@@ -5,70 +5,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chatbot Demo Site</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #333;
-            line-height: 1.6;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            text-align: center;
-        }
-
-        .container {
-            max-width: 600px;
-            padding: 40px;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        h1 {
-            margin-bottom: 20px;
-            color: #1a1a1a;
-        }
-
-        p {
-            margin-bottom: 30px;
-            font-size: 1.1em;
-            color: #666;
-        }
-
-        .feature-list {
-            text-align: left;
-            margin: 20px auto;
-            display: inline-block;
-        }
-
-        li {
-            margin-bottom: 10px;
-        }
-    </style>
 </head>
 
-<body>
-    <div class="container">
-        <h1>Welcome to My Website</h1>
-        <p>This is a demo page to test the embeddable chatbot widget.</p>
-        <div class="feature-list">
-            <h3>Try it out:</h3>
-            <ul>
-                <li>Look for the chat bubble in the bottom right.</li>
-                <li>Click it to open the chat window.</li>
-                <li>Send a message (e.g., "Hello").</li>
-                <li>Wait for the echo bot to reply.</li>
-            </ul>
-        </div>
-    </div>
+<body
+    style="margin: 0; padding: 0; min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: sans-serif; display: flex; align-items: center; justify-content: center; color: white;">
+
+
 
     <!-- Embed Code -->
-    <script src="/widget/chat-widget.js" data-primary-color="#6200ee" data-bot-name="AI Assistant"
-        data-welcome-message="Hi! How can I help you today?" data-site-context='{}'></script>
+    <script src="widget/chat-widget.js" data-server-url="https://chatbot-widget-ghh8.onrender.com"
+        data-primary-color="#007bff" data-bot-name="My Assistant">
+        </script>
 </body>
 
 </html>
