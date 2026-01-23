@@ -443,11 +443,21 @@
         .chat-window { 
           width: 100%;
           height: 100%;
+          height: 100dvh; /* Dynamic viewport height for modern browsers */
           bottom: 0;
           right: 0;
           border-radius: 0;
+          display: none; /* Ensure hidden by default logic */
         }
-        .chat-button { display: none; }
+        .chat-window.open {
+          display: flex;
+        }
+        
+        /* Hide the floating toggle button ONLY when chat is OPEN on mobile 
+           so it doesn't block the input area. */
+        .chat-button.open {
+            display: none;
+        }
       }
     `;
     shadow.appendChild(style);
