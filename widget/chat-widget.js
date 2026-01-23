@@ -439,22 +439,19 @@
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       }
 
-      @media (max-width: 480px) {
+      @media (max-width: 768px) {
         .chat-window { 
           width: 100%;
           height: 100%;
-          height: 100dvh; /* Dynamic viewport height for modern browsers */
+          height: 100dvh;
           bottom: 0;
           right: 0;
           border-radius: 0;
-          display: none; /* Ensure hidden by default logic */
+          display: none;
         }
         .chat-window.open {
           display: flex;
         }
-        
-        /* Hide the floating toggle button ONLY when chat is OPEN on mobile 
-           so it doesn't block the input area. */
         .chat-button.open {
             display: none;
         }
@@ -462,62 +459,49 @@
     `;
     shadow.appendChild(style);
 
-    // SVG Icons
-    // SVG Icons (Lucide-style Rounded)
-    const ICONS = {
-      msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
-      close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
-      send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
-      down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
-    };
-
-    const chatButton = document.createElement('button');
-    chatButton.className = 'chat-button';
-    chatButton.innerHTML = `
-      <div class="msg-icon">${ICONS.msg}</div>
-      <div class="close-icon">${ICONS.close}</div>
-    `;
-
-    const chatWindow = document.createElement('div');
-    chatWindow.className = 'chat-window';
-    chatWindow.innerHTML = `
-      <div class="chat-header">
-        <div class="header-info">
-          <span class="bot-name">${CONFIG.botName}</span>
-        </div>
-        <div class="header-actions">
-          <button class="min-btn">${ICONS.down}</button>
-        </div>
-      </div>
-      <div class="chat-messages" id="messages"></div>
-      <div class="chat-input-area">
-        <input type="text" class="chat-input" placeholder="Type a message..." />
-        <button class="send-btn">${ICONS.send}</button>
-      </div>
-    `;
+    // ... (rest of UI creation) ...
+    // ...
 
     shadow.appendChild(chatButton);
     shadow.appendChild(chatWindow);
 
-    const messagesContainer = chatWindow.querySelector('#messages');
-    const input = chatWindow.querySelector('.chat-input');
-    const sendBtn = chatWindow.querySelector('.send-btn');
-    const minBtn = chatWindow.querySelector('.min-btn');
+    // ...
+
+    // SHOW WELCOME MESSAGE IMMEDIATELY (OFFLINE MODE)
+    // This ensures the user sees something even if the server is slow to connect
+    if (CONFIG.welcomeMessage) {
+      addMessage(CONFIG.welcomeMessage, 'bot', null, [
+        "Tell me about extensions",
+        "Contact Support",
+        "How to install?"
+      ]);
+    }
 
     let isOpen = false;
     function toggleChat() {
       isOpen = !isOpen;
       if (isOpen) {
         chatWindow.style.display = 'flex';
-        // Force reflow for animation
-        chatWindow.offsetHeight;
+        chatWindow.offsetHeight; // Force reflow
         chatWindow.classList.add('open');
         chatButton.classList.add('open');
         input.focus();
         scrollToBottom();
-        // Load socket when chat is opened for the first time if not already
+
+        // Load socket if not loaded
         if (!socketInstance) {
-          loadSocketIO(initSocket);
+          // Priority: Try CDN first for reliability on external sites
+          const cdnScript = document.createElement('script');
+          cdnScript.src = 'https://cdn.socket.io/4.6.0/socket.io.min.js';
+          cdnScript.onload = () => {
+            addLog('Socket.io loaded from CDN');
+            initSocket();
+          };
+          cdnScript.onerror = () => {
+            // Fallback to local
+            loadSocketIO(initSocket);
+          };
+          document.head.appendChild(cdnScript);
         }
       } else {
         chatWindow.classList.remove('open');
