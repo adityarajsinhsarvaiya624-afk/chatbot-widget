@@ -525,14 +525,21 @@
 
         // Load socket if not loaded
         if (!socketInstance) {
+          // REQUIREJS HACK: Magento uses RequireJS which hijacks socket.io. 
+          // We temporarily hide 'define' so socket.io attaches to window.io globally.
+          const backupDefine = window.define;
+          window.define = null;
+
           // Priority: Try CDN first for reliability on external sites
           const cdnScript = document.createElement('script');
           cdnScript.src = 'https://cdn.socket.io/4.6.0/socket.io.min.js';
           cdnScript.onload = () => {
+            if (backupDefine) window.define = backupDefine; // Restore RequireJS
             addLog('Socket.io loaded from CDN');
             initSocket();
           };
           cdnScript.onerror = () => {
+            if (backupDefine) window.define = backupDefine; // Restore RequireJS
             // Fallback to local
             loadSocketIO(initSocket);
           };
