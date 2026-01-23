@@ -797,7 +797,27 @@
 
     function sendMessage() {
       const text = input.value.trim();
-      if (!text || !socketInstance) return;
+      if (!text) return;
+
+      if (!socketInstance) {
+        addLog('ERROR: Attempted to send message but socket is not connected.');
+
+        // Attempt to recover
+        if (window.io) {
+          addLog('Recovery: Re-initializing socket...');
+          initSocket();
+          // Show a small toast to user
+          const toast = document.createElement('div');
+          toast.textContent = "Reconnecting... please wait.";
+          toast.style.cssText = "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:white;padding:5px 10px;border-radius:4px;font-size:12px;opacity:0;transition:opacity 0.3s;";
+          chatWindow.appendChild(toast);
+          setTimeout(() => toast.style.opacity = '1', 10);
+          setTimeout(() => toast.remove(), 3000);
+        } else {
+          alert("Unable to connect to chat server. Please check your internet or strict firewall settings.");
+        }
+        return;
+      }
 
       const dynamicContent = getPageContent();
       const combinedContext = {

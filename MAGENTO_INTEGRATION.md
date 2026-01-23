@@ -15,7 +15,9 @@ This guide explains how to embed your AI chatbot into a Magento 2 website.
         3. Add a new Environment Variable:
             - **Key**: `ALLOWED_ORIGINS`
             - **Value**: `https://www.milople.com,https://milople.com`
-        4. This ensures NO ONE else can use your paid AI credits on their site.
+        4.  **Localhost / Testing**: If you are testing on your local machine (e.g., XAMPP, Docker), you **MUST** add your local URL too!
+            - Example: `https://www.milople.com,http://localhost,http://127.0.0.1,http://magento.local`
+            - If you don't add your local URL, the chatbot will block your local site.
 
 ---
 
