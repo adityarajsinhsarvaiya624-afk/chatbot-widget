@@ -126,6 +126,12 @@
   // 4. WIDGET INITIALIZATION
   function initWidget() {
     addLog('Initializing Widget UI...');
+
+    // Helper to darken/lighten hex color
+    function adjustColor(color, amount) {
+      return '#' + color.replace(/^#/, '').replace(/../g, color => ('0' + Math.min(255, Math.max(0, parseInt(color, 16) + amount)).toString(16)).substr(-2));
+    }
+
     const container = document.createElement('div');
     container.id = 'chat-widget-container';
     container.style.position = 'fixed';
@@ -137,310 +143,346 @@
     const shadow = container.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent = `
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
       :host {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        --primary-gradient: linear-gradient(135deg, ${CONFIG.primaryColor}, ${adjustColor(CONFIG.primaryColor, -20)});
+        --glass-bg: rgba(255, 255, 255, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.5);
+        --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.12);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
       }
+
       .chat-button {
         position: absolute;
         pointer-events: auto;
         bottom: 25px;
         right: 25px;
-        background-color: ${CONFIG.primaryColor};
+        background: var(--primary-gradient);
         color: white;
         border: none;
         border-radius: 50%;
-        width: 56px;
-        height: 56px;
+        width: 60px;
+        height: 60px;
         cursor: pointer;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        box-shadow: var(--shadow-lg);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 26px;
         z-index: 9999;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s;
       }
+
       .chat-button:hover { 
-        transform: scale(1.08) translateY(-2px);
-        box-shadow: 0 12px 32px rgba(0,0,0,0.2);
+        transform: scale(1.1) rotate(5deg);
+        box-shadow: 0 15px 45px rgba(0,0,0,0.2);
       }
+
+      /* Container for icons to ensure perfect centering */
+      .chat-button .msg-icon,
+      .chat-button .close-icon {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .chat-button svg {
+        width: 28px;
+        height: 28px;
+        fill: none; /* SVG content handles fill/stroke */
+        stroke: currentColor;
+      }
+      
+      /* Visually center the message icon (offset for tail) */
+      .chat-button .msg-icon svg {
+        transform: translateY(-2px); 
+      }
+      
+      .chat-button .close-icon {
+        opacity: 0;
+        transform: scale(0.5) rotate(-90deg);
+      }
+
+      .chat-button.open .msg-icon {
+        opacity: 0;
+        transform: scale(0.5) rotate(90deg);
+      }
+
+      .chat-button.open .close-icon {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+      }
+
       .chat-window {
         position: absolute;
         pointer-events: auto;
-        bottom: 95px;
+        bottom: 100px;
         right: 25px;
         width: 380px;
-        height: 580px;
-        background: rgba(255, 255, 255, 0.75);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-radius: 20px;
-        box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+        height: 600px;
+        background: var(--glass-bg);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid var(--glass-border);
+        border-radius: 24px;
+        box-shadow: var(--shadow-lg);
         display: none;
         flex-direction: column;
         z-index: 9999;
         overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         transform-origin: bottom right;
         opacity: 0;
-        transform: scale(0.9);
+        transform: scale(0.9) translateY(20px);
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
       }
+
       .chat-window.open {
         display: flex;
         opacity: 1;
-        transform: scale(1);
+        transform: scale(1) translateY(0);
       }
+
       .chat-header { 
-        background: ${CONFIG.primaryColor}; 
+        background: var(--primary-gradient); 
         color: white; 
         padding: 20px 24px; 
-        font-weight: 600; 
-        font-size: 16px;
         display: flex; 
         justify-content: space-between; 
         align-items: center; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      }
+
+      .header-info {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .bot-name {
+        font-weight: 600;
+        font-size: 17px;
         letter-spacing: -0.01em;
       }
-      .close-btn { 
-        background: rgba(255,255,255,0.15); 
+
+
+      .header-actions .min-btn {
+        background: rgba(255,255,255,0.2); 
         border: none; 
         color: white; 
-        font-size: 18px; 
-        cursor: pointer; 
         width: 32px;
         height: 32px;
         border-radius: 50%;
+        cursor: pointer; 
         display: flex;
         align-items: center;
         justify-content: center;
         transition: background 0.2s;
       }
-      .close-btn:hover { background: rgba(255,255,255,0.25); }
+      
+      .header-actions .min-btn:hover {
+        background: rgba(255,255,255,0.35);
+      }
+
       .chat-messages { 
         flex: 1; 
-        padding: 24px; 
+        padding: 20px; 
         overflow-y: auto; 
         display: flex; 
         flex-direction: column; 
-        gap: 16px; 
-        background: #fdfdfd; 
+        gap: 12px; 
         scrollbar-width: thin;
       }
+
+      /* Custom Scrollbar */
+      .chat-messages::-webkit-scrollbar {
+        width: 6px;
+      }
+      .chat-messages::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .chat-messages::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,0.1);
+        border-radius: 3px;
+      }
+
       .message { 
-        padding: 12px 16px; 
+        padding: 12px 18px; 
         border-radius: 18px; 
         max-width: 85%; 
         font-size: 14.5px; 
         line-height: 1.5; 
-        word-wrap: break-word;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        text-align: left;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
         animation: messageSlideIn 0.3s ease-out forwards;
         opacity: 0;
         transform: translateY(10px);
+        position: relative;
       }
+
       @keyframes messageSlideIn {
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
+        to { opacity: 1; transform: translateY(0); }
       }
+
       .message.user { 
-        background: ${CONFIG.primaryColor}; 
+        background: var(--primary-gradient); 
         color: white; 
         align-self: flex-end; 
         border-bottom-right-radius: 4px; 
       }
+
       .message.bot { 
-        background: rgba(241, 243, 245, 0.8); 
-        color: #212529; 
+        background: white; 
+        color: #1f2937; 
         align-self: flex-start; 
         border-bottom-left-radius: 4px; 
+        border: 1px solid #f3f4f6;
       }
-      .message.bot p { margin: 0 0 8px 0; }
-      .message.bot p:last-child { margin-bottom: 0; }
-      .message.bot ul { margin: 0 0 8px 0; padding-left: 20px; }
-      .message.bot li { margin-bottom: 4px; }
-      .message.bot strong { font-weight: 600; }
 
       .typing-indicator {
-        display: flex;
-        gap: 4px;
+        background: white;
+        border: 1px solid #f3f4f6;
         padding: 12px 16px;
-        background: rgba(241, 243, 245, 0.8);
         border-radius: 18px;
         border-bottom-left-radius: 4px;
-        align-self: flex-start;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        margin-bottom: 16px;
+        width: fit-content;
+        display: flex;
+        gap: 4px;
+        box-shadow: var(--shadow-md);
+        margin-bottom: 12px;
       }
-      .typing-dot {
-        width: 6px;
-        height: 6px;
-        background: #90949c;
-        border-radius: 50%;
-        animation: typingBounce 1.4s infinite ease-in-out both;
-      }
-      .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-      .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-      @keyframes typingBounce {
-        0%, 80%, 100% { transform: scale(0); }
-        40% { transform: scale(1.0); }
-      }
+
       .chat-input-area { 
-        padding: 20px 24px; 
-        border-top: 1px solid #f1f3f5; 
+        padding: 16px 20px; 
+        background: rgba(255,255,255,0.9);
+        border-top: 1px solid rgba(0,0,0,0.05); 
         display: flex; 
-        gap: 12px; 
-        background: white; 
         align-items: center;
+        gap: 10px;
+        backdrop-filter: blur(5px);
       }
+
       .chat-input { 
         flex: 1; 
-        padding: 12px 18px; 
-        border: 1px solid #e9ecef; 
-        border-radius: 24px; 
+        padding: 14px 20px; 
+        border: 1px solid #e5e7eb; 
+        border-radius: 30px; 
         outline: none; 
         font-size: 14px;
-        transition: border-color 0.2s, box-shadow 0.2s;
-        background: #f8f9fa;
+        transition: all 0.2s;
+        background: #f9fafb;
+        color: #374151;
       }
+
       .chat-input:focus { 
         border-color: ${CONFIG.primaryColor}; 
-        box-shadow: 0 0 0 3px ${CONFIG.primaryColor}22;
         background: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
       }
+
       .send-btn { 
-        background: ${CONFIG.primaryColor}; 
+        background: var(--primary-gradient); 
         color: white; 
         border: none; 
-        width: 40px;
-        height: 40px;
+        width: 48px;
+        height: 48px;
         border-radius: 50%; 
         cursor: pointer; 
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: transform 0.2s, opacity 0.2s;
-        flex-shrink: 0;
+        transition: transform 0.2s, box-shadow 0.2s;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       }
-      .send-btn:hover { transform: scale(1.05); }
-      .send-btn:active { transform: scale(0.95); }
-      .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-      /* Suggested Replies Chips */
+      .send-btn:hover { 
+        transform: scale(1.05); 
+        box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+      }
+      
+      .send-btn svg {
+        width: 20px;
+        height: 20px;
+        fill: white;
+        margin-left: 2px;
+      }
+
+      /* Chips, Images, Tables remain similar but refined */
       .suggestion-chips {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
-        margin-top: 12px;
-        align-self: flex-start;
+        margin-top: 8px;
+        margin-bottom: 8px;
       }
+      
       .chip {
         background: white;
         color: ${CONFIG.primaryColor};
         border: 1px solid ${CONFIG.primaryColor};
-        padding: 6px 14px;
-        border-radius: 18px;
+        padding: 8px 16px;
+        border-radius: 20px;
         font-size: 13px;
+        font-weight: 500;
         cursor: pointer;
         transition: all 0.2s;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
       }
+      
       .chip:hover {
         background: ${CONFIG.primaryColor};
         color: white;
-        transform: translateY(-1px);
-      }
-
-      /* Tables */
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        margin: 10px 0;
-        font-size: 13px;
-        background: white;
-        border-radius: 8px;
-        overflow: hidden;
-      }
-      th, td {
-        border: 1px solid #e9ecef;
-        padding: 8px 10px;
-        text-align: left;
-      }
-      th {
-        background: #f8f9fa;
-        font-weight: 600;
-      }
-      tr:nth-child(even) {
-        background: #fdfdfd;
-      }
-      
-      /* Images */
-      .message-img {
-        max-width: 100%;
-        border-radius: 8px;
-        margin: 8px 0;
-        display: block;
+        transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       }
 
       @media (max-width: 480px) {
         .chat-window { 
-          width: calc(100vw - 32px); 
-          height: auto;
-          max-height: calc(100vh - 100px - env(safe-area-inset-bottom, 0px)); 
-          bottom: calc(85px + env(safe-area-inset-bottom, 0px)); 
-          right: 16px; 
-          left: 16px;
-          margin: 0 auto;
+          width: 100%;
+          height: 100%;
+          bottom: 0;
+          right: 0;
+          border-radius: 0;
         }
-        .chat-button { 
-          bottom: calc(20px + env(safe-area-inset-bottom, 0px)); 
-          right: 20px; 
-        }
-        .chat-messages {
-          padding: 16px;
-        }
-        .chat-header {
-          padding: 16px 20px;
-        }
-        .chat-input-area {
-          padding: 16px 20px;
-        }
-        .send-btn {
-          width: 44px;
-          height: 44px;
-        }
-      }
-
-      /* Landscape or very short screens */
-      @media (max-height: 500px) {
-        .chat-window {
-          height: calc(100vh - 40px);
-          bottom: 20px;
-        }
-        .chat-button { display: none; } /* Hide button when window takes over in short landscape */
+        .chat-button { display: none; }
       }
     `;
     shadow.appendChild(style);
 
+    // SVG Icons
+    // SVG Icons (Lucide-style Rounded)
+    const ICONS = {
+      msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
+      close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
+      send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
+      down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
+    };
+
     const chatButton = document.createElement('button');
     chatButton.className = 'chat-button';
-    chatButton.innerHTML = '💬';
+    chatButton.innerHTML = `
+      <div class="msg-icon">${ICONS.msg}</div>
+      <div class="close-icon">${ICONS.close}</div>
+    `;
 
     const chatWindow = document.createElement('div');
     chatWindow.className = 'chat-window';
     chatWindow.innerHTML = `
       <div class="chat-header">
-        <span>${CONFIG.botName}</span>
-        <button class="close-btn">×</button>
+        <div class="header-info">
+          <span class="bot-name">${CONFIG.botName}</span>
+        </div>
+        <div class="header-actions">
+          <button class="min-btn">${ICONS.down}</button>
+        </div>
       </div>
       <div class="chat-messages" id="messages"></div>
       <div class="chat-input-area">
         <input type="text" class="chat-input" placeholder="Type a message..." />
-        <button class="send-btn">Send</button>
+        <button class="send-btn">${ICONS.send}</button>
       </div>
     `;
 
@@ -450,7 +492,7 @@
     const messagesContainer = chatWindow.querySelector('#messages');
     const input = chatWindow.querySelector('.chat-input');
     const sendBtn = chatWindow.querySelector('.send-btn');
-    const closeBtn = chatWindow.querySelector('.close-btn');
+    const minBtn = chatWindow.querySelector('.min-btn');
 
     let isOpen = false;
     function toggleChat() {
@@ -460,6 +502,7 @@
         // Force reflow for animation
         chatWindow.offsetHeight;
         chatWindow.classList.add('open');
+        chatButton.classList.add('open');
         input.focus();
         scrollToBottom();
         // Load socket when chat is opened for the first time if not already
@@ -468,6 +511,7 @@
         }
       } else {
         chatWindow.classList.remove('open');
+        chatButton.classList.remove('open');
         setTimeout(() => {
           if (!isOpen) chatWindow.style.display = 'none';
         }, 300);
@@ -475,7 +519,7 @@
     }
 
     chatButton.addEventListener('click', toggleChat);
-    closeBtn.addEventListener('click', toggleChat);
+    minBtn.addEventListener('click', toggleChat);
 
     function scrollToBottom(force = false) {
       const threshold = 50;

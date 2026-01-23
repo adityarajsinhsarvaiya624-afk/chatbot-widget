@@ -5,6 +5,7 @@ const cors = require('cors');
 const { Server } = require('socket.io');
 const path = require('path');
 const crypto = require('crypto'); // For generating IDs
+const rateLimit = require('express-rate-limit'); // Security: Rate Limiting
 
 const scraper = require('./scraper');
 const knowledgeIndex = require('./embeddings');
@@ -21,15 +22,27 @@ console.log('AI Initialized with key length:', apiKey ? apiKey.length : 0);
 
 const app = express();
 const server = http.createServer(app);
+
+// Security: Rate Limiting (1000 requests per 15 minutes)
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 1000,
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use(limiter);
+
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow connection from any website embedding the widget
+        origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : "*", // Allow connection from any website embedding the widget
         methods: ["GET", "POST"]
     }
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : "*"
+}));
 app.use(express.json());
 
 // Serve the widget file statically
@@ -56,8 +69,33 @@ if (scrapeUrls) {
 
 // --- IN-MEMORY STORAGE ---
 // NOTE: This data is lost when the server restarts.
-const conversationsStore = new Map(); // Key: visitorId, Value: { _id, visitorId, createdAt }
+const conversationsStore = new Map(); // Key: visitorId, Value: { _id, visitorId, createdAt, lastActiveAt }
 const messagesStore = new Map();      // Key: conversationId, Value: Array of Message Objects
+
+// Security: Memory Management (Pruning)
+// Remove conversations inactive for more than 24 hours to prevent memory leaks
+const PRUNE_INTERVAL_MS = 60 * 60 * 1000; // Run every hour
+const INACTIVE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+setInterval(() => {
+    const now = Date.now();
+    let prunedCount = 0;
+
+    for (const [visitorId, conversation] of conversationsStore.entries()) {
+        const lastActive = conversation.lastActiveAt || conversation.createdAt;
+        if (now - new Date(lastActive).getTime() > INACTIVE_THRESHOLD_MS) {
+            // Delete messages first
+            messagesStore.delete(conversation._id);
+            // Delete conversation
+            conversationsStore.delete(visitorId);
+            prunedCount++;
+        }
+    }
+    if (prunedCount > 0) {
+        console.log(`[Memory] Pruned ${prunedCount} inactive conversations.`);
+    }
+}, PRUNE_INTERVAL_MS);
+
 
 // Helper to generate simple IDs
 const generateId = () => crypto.randomUUID();
@@ -67,6 +105,12 @@ io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
 
     socket.on('join_conversation', ({ visitorId }) => {
+        // Security: Input Validation
+        if (!visitorId || typeof visitorId !== 'string' || visitorId.length > 100) {
+            console.error('Invalid visitorId received');
+            return;
+        }
+
         console.log(`INFO: join_conversation request for visitorId: ${visitorId}`);
         try {
             let conversation = conversationsStore.get(visitorId);
@@ -76,12 +120,15 @@ io.on('connection', (socket) => {
                 conversation = {
                     _id: generateId(),
                     visitorId: visitorId,
-                    createdAt: new Date()
+                    createdAt: new Date(),
+                    lastActiveAt: new Date()
                 };
                 conversationsStore.set(visitorId, conversation);
                 messagesStore.set(conversation._id, []); // Initialize empty message list
             } else {
                 console.log(`INFO: Found existing conversation: ${conversation._id}`);
+                // Update last active
+                conversation.lastActiveAt = new Date();
             }
 
             socket.join(conversation._id);
@@ -97,13 +144,25 @@ io.on('connection', (socket) => {
     });
 
     socket.on('send_message', async ({ visitorId, content, siteContext }) => {
-        console.log(`INFO: send_message from ${visitorId}: ${content}`);
+        // Security: Input Validation
+        if (!content || typeof content !== 'string') {
+            return; // Ignore empty or invalid content
+        }
+        if (content.length > 2000) {
+            socket.emit('error', { message: 'Message too long (max 2000 characters).' });
+            return;
+        }
+
+        console.log(`INFO: send_message from ${visitorId}: ${content.substring(0, 50)}...`);
         try {
             const conversation = conversationsStore.get(visitorId);
             if (!conversation) {
                 console.error(`ERROR: Conversation not found for visitorId: ${visitorId}`);
                 return;
             }
+
+            // Update last active
+            conversation.lastActiveAt = new Date();
 
             // Save user message
             const userMessage = {
