@@ -227,6 +227,7 @@
         right: 25px;
         width: 380px;
         height: 600px;
+        max-height: calc(100vh - 120px); /* Prevent top-overflow on small laptop screens */
         background: var(--glass-bg);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
@@ -459,13 +460,47 @@
     `;
     shadow.appendChild(style);
 
-    // ... (rest of UI creation) ...
-    // ...
+    // SVG Icons
+    // SVG Icons (Lucide-style Rounded)
+    const ICONS = {
+      msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
+      close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
+      send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
+      down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
+    };
+
+    const chatButton = document.createElement('button');
+    chatButton.className = 'chat-button';
+    chatButton.innerHTML = `
+      <div class="msg-icon">${ICONS.msg}</div>
+      <div class="close-icon">${ICONS.close}</div>
+    `;
+
+    const chatWindow = document.createElement('div');
+    chatWindow.className = 'chat-window';
+    chatWindow.innerHTML = `
+      <div class="chat-header">
+        <div class="header-info">
+          <span class="bot-name">${CONFIG.botName}</span>
+        </div>
+        <div class="header-actions">
+          <button class="min-btn">${ICONS.down}</button>
+        </div>
+      </div>
+      <div class="chat-messages" id="messages"></div>
+      <div class="chat-input-area">
+        <input type="text" class="chat-input" placeholder="Type a message..." />
+        <button class="send-btn">${ICONS.send}</button>
+      </div>
+    `;
 
     shadow.appendChild(chatButton);
     shadow.appendChild(chatWindow);
 
-    // ...
+    const messagesContainer = chatWindow.querySelector('#messages');
+    const input = chatWindow.querySelector('.chat-input');
+    const sendBtn = chatWindow.querySelector('.send-btn');
+    const minBtn = chatWindow.querySelector('.min-btn');
 
     // SHOW WELCOME MESSAGE IMMEDIATELY (OFFLINE MODE)
     // This ensures the user sees something even if the server is slow to connect
