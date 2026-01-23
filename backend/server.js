@@ -143,7 +143,18 @@ io.on('connection', (socket) => {
         }
     });
 
+    const lastMessageTime = new Map(); // Rate limiting map
+
     socket.on('send_message', async ({ visitorId, content, siteContext }) => {
+        // Security: Rate Limiting (1 message per second)
+        const now = Date.now();
+        const lastTime = lastMessageTime.get(visitorId) || 0;
+        if (now - lastTime < 1000) {
+            socket.emit('error', { message: 'You are sending messages too fast.' });
+            return;
+        }
+        lastMessageTime.set(visitorId, now);
+
         // Security: Input Validation
         if (!content || typeof content !== 'string') {
             return; // Ignore empty or invalid content

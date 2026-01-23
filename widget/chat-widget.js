@@ -594,10 +594,12 @@
         processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
         // Italic (*text*)
         processed = processed.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        // Simple Links
-        processed = processed.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:${CONFIG.primaryColor}">$1</a>');
-        // Images ![alt](url)
-        processed = processed.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="message-img" />');
+        // Simple Links (Sanitized)
+        processed = processed.replace(/\[(.*?)\]\((.*?)\)/g, (match, text, url) => {
+          // Security: Prevent javascript: or data: links
+          if (url.match(/^(javascript:|data:)/i)) return text;
+          return `<a href="${url}" target="_blank" style="color:${CONFIG.primaryColor}">${text}</a>`;
+        });
 
         // TABLES
         if (processed.includes('|') && (processed.match(/|/g) || []).length > 1) {
