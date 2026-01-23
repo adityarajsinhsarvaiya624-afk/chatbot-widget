@@ -182,8 +182,8 @@ io.on('connection', (socket) => {
             io.to(conversation._id).emit('receive_message', userMessage);
 
             // --- GROQ AI LOGIC ---
-            // Get last 10 messages for context
-            const recentMessages = conversationMsgs.slice(-10);
+            // Get last 6 messages for context (Reduced from 10 to save tokens)
+            const recentMessages = conversationMsgs.slice(-6);
 
             const history = recentMessages.map(m => ({
                 role: m.sender === 'user' ? 'user' : 'assistant',
@@ -234,7 +234,8 @@ Your response format:
 
                             // SEARCH LOGIC: Instead of full domain context, we search for query-relevant chunks
                             console.log(`[RAG] Searching knowledge base for: "${content}"`);
-                            const relevantChunks = await knowledgeIndex.search(content, 5);
+                            // Optimization: Fetch only top 3 chunks instead of 5 to save tokens
+                            const relevantChunks = await knowledgeIndex.search(content, 3);
                             scrapedContext = knowledgeIndex.formatContext(relevantChunks);
 
                         } catch (e) {
