@@ -749,7 +749,26 @@
       socketInstance.on('connect', () => {
         addLog('Socket Connected! ID: ' + socketInstance.id);
         socketInstance.emit('join_conversation', { visitorId });
+
+        // Remove any connection error toasts
+        const existingToast = chatWindow.querySelector('.connection-toast');
+        if (existingToast) existingToast.remove();
       });
+
+      socketInstance.on('connect_error', (err) => {
+        addLog('Connection Error: ' + err.message);
+
+        // Show persistent error toast
+        let toast = chatWindow.querySelector('.connection-toast');
+        if (!toast) {
+          toast = document.createElement('div');
+          toast.className = 'connection-toast';
+          toast.style.cssText = "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(220, 38, 38, 0.95);color:white;padding:8px 12px;border-radius:4px;font-size:11px;font-weight:500;z-index:100;text-align:center;width:80%;pointer-events:none;";
+          chatWindow.appendChild(toast);
+        }
+        toast.textContent = `Connection Failed: ${err.message}. Retrying...`;
+      });
+
       socketInstance.on('chat_history', (history) => {
         messagesContainer.innerHTML = '';
         if (history.length === 0 && CONFIG.welcomeMessage) {
