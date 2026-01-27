@@ -32,16 +32,25 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Helper to safely parse allowed origins
+const getAllowedOrigins = () => {
+    const envOrigins = process.env.ALLOWED_ORIGINS;
+    if (!envOrigins || envOrigins.trim() === '') {
+        return "*"; // Allow all if not set or empty
+    }
+    return envOrigins.split(',').map(o => o.trim()).filter(o => o.length > 0);
+};
+
 const io = new Server(server, {
     cors: {
-        origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : "*", // Allow connection from any website embedding the widget
+        origin: getAllowedOrigins(),
         methods: ["GET", "POST"]
     }
 });
 
 // Middleware
 app.use(cors({
-    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) : "*"
+    origin: getAllowedOrigins()
 }));
 app.use(express.json());
 

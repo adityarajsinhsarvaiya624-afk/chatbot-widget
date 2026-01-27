@@ -99,11 +99,15 @@ If you are using a modern "Block Theme" (like Twenty Twenty-Two/Three/Four) and 
 *   **Cache:** If you use a caching plugin like **WP Rocket**, **W3 Total Cache**, or **Autoptimize**, you MUST clear the cache after adding the code.
 *   **Logged In vs Logged Out:** Sometimes caching plugins only show changes to "Logged Out" visitors. Check in an Incognito window.
 
-### 2. "It says 'Unable to connect'"
-*   Using **WordPress Localhost** (e.g., LocalWP, XAMPP)?
-    *   You need to add `http://localhost`, `http://chatbot.local` (or your specific local domain) to the **Render Environment Variables** (`ALLOWED_ORIGINS`).
-*   Using a **Live Site**?
-    *   Ensure your domain (e.g., `https://mysite.com`) is in the `ALLOWED_ORIGINS` list on Render.
+### 2. "It says 'Unable to connect' or 'xhr poll error'"
+*   **What it means:** This is a security block (CORS). Your server is refusing the connection from this new website.
+*   **The Fix:**
+    1.  Go to your **[Render Dashboard](https://dashboard.render.com/)**.
+    2.  Select your Backend service > **Environment**.
+    3.  Find the `ALLOWED_ORIGINS` variable.
+    4.  **EITHER:** Add your new site URL (e.g., `,https://funny-cat.wpsandbox.net`) to the end.
+    5.  **OR (Recommended for testing):** DELETE the `ALLOWED_ORIGINS` variable entirely to allow ALL sites.
+    6.  Save and wait 2 minutes.
 
 ---
 
