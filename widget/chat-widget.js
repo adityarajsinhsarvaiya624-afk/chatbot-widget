@@ -356,6 +356,23 @@
         gap: 4px;
         box-shadow: var(--shadow-md);
         margin-bottom: 12px;
+        align-self: flex-start;
+      }
+
+      .typing-dot {
+        width: 6px;
+        height: 6px;
+        background: #9ca3af;
+        border-radius: 50%;
+        animation: typingAnimation 1.4s infinite ease-in-out both;
+      }
+      
+      .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+      .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+      
+      @keyframes typingAnimation {
+        0%, 80%, 100% { transform: scale(0); }
+        40% { transform: scale(1); }
       }
 
       .chat-input-area { 
