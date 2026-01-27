@@ -59,6 +59,40 @@ If you prefer not to use a plugin, you can add it via your theme's `functions.ph
 
 ---
 
+## Option 3: Using the Site Editor (For Block Themes)
+If you are using a modern "Block Theme" (like Twenty Twenty-Two/Three/Four) and see the **Site Editor** (as shown in your screenshot), follow these steps:
+
+1.  **Open the Site Editor**:
+    *   Go to **Appearance > Editor**.
+    *   Click on **Patterns** or **Template Parts**, then select **Header**.
+    *   Or, if you are already in the editor, simply click on the Header area.
+
+2.  **Add a "Custom HTML" Block**:
+    *   Click the **+ (Plus)** button to add a new block inside the Header.
+    *   Search for **"Custom HTML"**.
+    *   Select the block to insert it.
+
+3.  **Paste the Snippet**:
+    *   Paste your chatbot snippet code into the box:
+
+    ```html
+    <!-- Chatbot Widget -->
+    <script 
+        src="https://chatbot-widget-ghh8.onrender.com/widget/chat-widget.js"
+        data-server-url="https://chatbot-widget-ghh8.onrender.com"
+        data-primary-color="#FF5501" 
+        data-bot-name="My AI Assistant"
+        data-welcome-message="Hi there! How can I help you?">
+    </script>
+    ```
+
+4.  **Save**:
+    *   Click **Save** in the top right corner.
+    *   This will apply the chatbot to every page that uses this Header!
+
+---
+
+
 ## Troubleshooting
 
 ### 1. "I don't see the widget!"
@@ -67,6 +101,27 @@ If you prefer not to use a plugin, you can add it via your theme's `functions.ph
 
 ### 2. "It says 'Unable to connect'"
 *   Using **WordPress Localhost** (e.g., LocalWP, XAMPP)?
-    *   You need to add `http://localhost` (or your local domain) to the **Render Environment Variables** (`ALLOWED_ORIGINS`).
+    *   You need to add `http://localhost`, `http://chatbot.local` (or your specific local domain) to the **Render Environment Variables** (`ALLOWED_ORIGINS`).
 *   Using a **Live Site**?
     *   Ensure your domain (e.g., `https://mysite.com`) is in the `ALLOWED_ORIGINS` list on Render.
+
+---
+
+## 🛑 Don't have a WordPress site to test on?
+If you want to check if this works but don't have a website, you can use a free "Sandbox" WordPress site. These expire after a few hours or days but are perfect for testing.
+
+### Recommended Platforms:
+1.  **[InstaWP](https://instawp.com)** (Best Alternative)
+    *   Click "Get Started", sign up for free, and create a "New Site" instantly.
+    *   Very reliable and gives you 48 hours for free.
+2.  **[WPSandbox](https://wpsandbox.net)** (No Signup)
+    *   Click "Create free dev site" to get a temporary site immediately.
+3.  **[TasteWP](https://tastewp.com)**
+    *   *Note: Currently under maintenance/upgrade.* Keep this as a backup option for later.
+
+**How to use them:**
+1.  Create a temporary site using one of the links above.
+2.  Go to the Admin Dashboard (they usually log you in automatically).
+3.  Follow **Option 1** above (install the "WPCode" plugin and paste your script).
+4.  Open the homepage to see your chatbot in action!
+    

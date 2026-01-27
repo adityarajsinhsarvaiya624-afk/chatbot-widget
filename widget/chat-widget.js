@@ -330,15 +330,16 @@
       }
 
       .message.user { 
+        background: ${CONFIG.primaryColor};
         background: var(--primary-gradient); 
-        color: white; 
+        color: white !important; 
         align-self: flex-end; 
         border-bottom-right-radius: 4px; 
       }
 
       .message.bot { 
         background: white; 
-        color: #1f2937; 
+        color: #1f2937 !important; 
         align-self: flex-start; 
         border-bottom-left-radius: 4px; 
         border: 1px solid #f3f4f6;
@@ -376,7 +377,7 @@
         font-size: 14px;
         transition: all 0.2s;
         background: #f9fafb;
-        color: #374151;
+        color: #374151 !important;
       }
 
       .chat-input:focus { 
