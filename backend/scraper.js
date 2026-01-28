@@ -111,7 +111,7 @@ async function crawlSite(startUrl) {
 
             // Add as a chunk
             if (text.length > 50) {
-                chunks.push({ url, text: text.substring(0, 30000), method }); // Keep a reasonable per-page limit
+                chunks.push({ url, text: text.substring(0, 5000), method }); // Keep a reasonable per-page limit
             }
 
             // Add new links to queue

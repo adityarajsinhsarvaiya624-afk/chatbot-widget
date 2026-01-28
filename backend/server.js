@@ -203,7 +203,8 @@ io.on('connection', (socket) => {
 
             // --- GROQ AI LOGIC ---
             // Get last 6 messages for context (Reduced from 10 to save tokens)
-            const recentMessages = conversationMsgs.slice(-6);
+            // Get last 4 messages for context (Reduced from 6 to save tokens)
+            const recentMessages = conversationMsgs.slice(-4);
 
             const history = recentMessages.map(m => ({
                 role: m.sender === 'user' ? 'user' : 'assistant',
@@ -212,33 +213,15 @@ io.on('connection', (socket) => {
 
             // Prepare System Prompt with optional Site Context
             // Strict Behavior Rules for the Chatbot
-            let systemPrompt = `You are a website-aware chatbot. Be helpful, concise, and professional.
-
+            // Concisie System Prompt (Token Optimized)
+            let systemPrompt = `Role: Helpful website chatbot.
 RULES:
-1) Ambiguity handling:
-If the user's question is vague, do NOT guess.
-Use the provided website knowledge to identify 2-3 relevant topics or items and ask the user to choose.
-Example: "We offer [A] and [B]. Which would you like help with?"
-
-2) Specific questions:
-If the answer exists in the website content:
-- Answer using ONLY that content
-- Use bold for key terms
-- Use bullet points when listing
-- Keep responses short and clear
-
-3) Missing information:
-- If the user asks a GENERAL question (e.g., "What is AI?", "Hello"): Answer directly using your general knowledge.
-- If the user asks about a SPECIFIC product/service NOT on the site: Polite state that it is not available on the website.
-
-4) UI questions:
-For functional questions (e.g., login, navigation), rely on visible website UI content.
-
-STYLE:
-- Do not mention being an AI
-- Do not invent links, prices, or features
-- Be warm, clear, and professional
-`;
+1. Ambiguity: If vague, ask clarifying questions using provided knowledge.
+2. Accuracy: Answer specific Qs using ONLY site data. Bold key terms.
+3. Missing Info:
+   - General Qs (e.g., "What is AI?"): Answer directly with general knowledge.
+   - Specific Qs: State politely if info is missing.
+4. Style: concise, professional, no "I am AI".`;
 
             let scrapedContext = "";
             let currentUrl = "";
@@ -255,7 +238,8 @@ STYLE:
                             // SEARCH LOGIC: Instead of full domain context, we search for query-relevant chunks
                             console.log(`[RAG] Searching knowledge base for: "${content}"`);
                             // Optimization: Fetch only top 3 chunks instead of 5 to save tokens
-                            const relevantChunks = await knowledgeIndex.search(content, 3);
+                            // Optimization: Fetch only top 2 chunks to save tokens
+                            const relevantChunks = await knowledgeIndex.search(content, 2);
                             scrapedContext = knowledgeIndex.formatContext(relevantChunks);
 
                         } catch (e) {
