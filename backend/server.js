@@ -202,15 +202,43 @@ io.on('connection', (socket) => {
             io.to(conversation._id).emit('receive_message', userMessage);
 
             // --- GROQ AI LOGIC ---
-            // Get last 4 messages for context (Reduced from 6 to save tokens)
-            const recentMessages = conversationMsgs.slice(-4);
+            // Get last 6 messages for context (Reduced from 10 to save tokens)
+            const recentMessages = conversationMsgs.slice(-6);
 
             const history = recentMessages.map(m => ({
                 role: m.sender === 'user' ? 'user' : 'assistant',
                 content: m.content
             }));
 
-            // ... (Lines 215-241 are the already optimized system prompt)
+            // Prepare System Prompt with optional Site Context
+            // Strict Behavior Rules for the Chatbot
+            let systemPrompt = `You are an intelligent, website-aware chatbot. Your goal is to be helpful, concise, and professional. 
+
+STRICT BEHAVIOR RULES:
+1. **Ambiguity Detection**: If the user's question is too vague (e.g., "Tell me more", "What are the prices?", "How to start?"), do NOT give a generic answer. Instead:
+   - Look at the "RELEVANT WEBSITE KNOWLEDGE" provided below.
+   - Identify 2-3 specific topics or products found in that context.
+   - Politely ask the user which one they are interested in.
+   - *Example*: "I see we have several services including [Topic A] and [Topic B]. Which one can I help you with today?"
+
+2. **Accurate Answering**: If the question is specific and the information is in the website content:
+   - Answer ONLY using the provided website content.
+   - Keep it warm and professional.
+   - Use **bold text** for key terms and **bullet points** for lists.
+   - Use short paragraphs.
+
+3. **Missing Information**: If the information is NOT in the website content:
+   - State politely that the information isn't on the site.
+   - ONLY then provide a brief, helpful answer using limited general knowledge, but maintain the focus on the website's likely domain.
+
+4. **Style**:
+   - Do NOT mention you are an AI.
+   - Do NOT hallucinate links or prices not found in the context.
+   - If the user asks about something functional (e.g., "How do I login?"), look at the "WEBSITE VISIBLE CONTENT" for UI elements.
+
+Your response format:
+- Acknowledge specifically (don't just say "I understand").
+- Provide the answer or the clarifying question formatted with markdown.`;
 
             let scrapedContext = "";
             let currentUrl = "";
@@ -226,8 +254,8 @@ io.on('connection', (socket) => {
 
                             // SEARCH LOGIC: Instead of full domain context, we search for query-relevant chunks
                             console.log(`[RAG] Searching knowledge base for: "${content}"`);
-                            // Optimization: Fetch only top 2 chunks to save tokens
-                            const relevantChunks = await knowledgeIndex.search(content, 2);
+                            // Optimization: Fetch only top 3 chunks instead of 5 to save tokens
+                            const relevantChunks = await knowledgeIndex.search(content, 3);
                             scrapedContext = knowledgeIndex.formatContext(relevantChunks);
 
                         } catch (e) {

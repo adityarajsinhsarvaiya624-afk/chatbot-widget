@@ -111,8 +111,7 @@ async function crawlSite(startUrl) {
 
             // Add as a chunk
             if (text.length > 50) {
-                // Optimization: reduced from 30k to 1.5k chars to save tokens per chunk
-                chunks.push({ url, text: text.substring(0, 1500), method });
+                chunks.push({ url, text: text.substring(0, 30000), method }); // Keep a reasonable per-page limit
             }
 
             // Add new links to queue
