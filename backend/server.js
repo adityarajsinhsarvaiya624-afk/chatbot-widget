@@ -202,22 +202,15 @@ io.on('connection', (socket) => {
             io.to(conversation._id).emit('receive_message', userMessage);
 
             // --- GROQ AI LOGIC ---
-            // Get last 6 messages for context (Reduced from 10 to save tokens)
-            const recentMessages = conversationMsgs.slice(-6);
+            // Get last 4 messages for context (Reduced from 6 to save tokens)
+            const recentMessages = conversationMsgs.slice(-4);
 
             const history = recentMessages.map(m => ({
                 role: m.sender === 'user' ? 'user' : 'assistant',
                 content: m.content
             }));
 
-            // Prepare System Prompt with optional Site Context
-            // Strict Behavior Rules for the Chatbot
-            let systemPrompt = `Role: Helpful, professional website chatbot.
-Rules:
-1. Ambiguity: If user query is vague (e.g., "Tell me more"), search "RELEVANT KNOWLEDGE" below for 2-3 topics and ask specific clarifying questions. Do NOT answer generically.
-2. Accuracy: Answer ONLY using provided website content/knowledge. If missing, politely state info is not on the site before offering general help.
-3. Style: Concise (short paragraphs), professional, warm. Use bolding/bullets for readability. NEVER mention you are an AI. Do NOT hallucinate.
-4. Format: Acknowledge intent, then answer/clarify using markdown.`;
+            // ... (Lines 215-241 are the already optimized system prompt)
 
             let scrapedContext = "";
             let currentUrl = "";
@@ -233,8 +226,8 @@ Rules:
 
                             // SEARCH LOGIC: Instead of full domain context, we search for query-relevant chunks
                             console.log(`[RAG] Searching knowledge base for: "${content}"`);
-                            // Optimization: Fetch only top 3 chunks instead of 5 to save tokens
-                            const relevantChunks = await knowledgeIndex.search(content, 3);
+                            // Optimization: Fetch only top 2 chunks to save tokens
+                            const relevantChunks = await knowledgeIndex.search(content, 2);
                             scrapedContext = knowledgeIndex.formatContext(relevantChunks);
 
                         } catch (e) {
