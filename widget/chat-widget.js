@@ -95,32 +95,49 @@
 
   // 3. LAZY SOCKET LOADING
   let socketInstance = null;
+
+  function loadSocketWithHack(url, callback, onError) {
+    // REQUIREJS HACK: Magento uses RequireJS which hijacks socket.io. 
+    // We temporarily hide 'define' so socket.io attaches to window.io globally.
+    const backupDefine = window.define;
+    if (window.define) {
+      window.define = null;
+      addLog('RequireJS detected. Temporarily disabled "define" for Socket.io load.');
+    }
+
+    const script = document.createElement('script');
+    script.src = url;
+    script.onload = () => {
+      if (backupDefine) window.define = backupDefine; // Restore RequireJS
+      addLog(`Socket.io loaded from ${url}`);
+      callback();
+    };
+    script.onerror = () => {
+      if (backupDefine) window.define = backupDefine; // Restore RequireJS
+      addLog(`Failed to load Socket.io from ${url}`);
+      if (onError) onError();
+    };
+    document.head.appendChild(script);
+  }
+
   function loadSocketIO(callback) {
     if (window.io) {
       callback();
       return;
     }
     addLog('Loading Socket.io...');
-    const script = document.createElement('script');
-    const localUrl = `${SERVER_URL}/socket.io/socket.io.js`;
-    script.src = localUrl;
 
-    script.onload = () => {
-      addLog('Socket.io loaded from local server');
-      callback();
-    };
-    script.onerror = () => {
+    // Try Local/Server version first (guarantees version match)
+    const localUrl = `${SERVER_URL}/socket.io/socket.io.js`;
+
+    loadSocketWithHack(localUrl, callback, () => {
       addLog('Failed local load, trying CDN...');
-      const cdnScript = document.createElement('script');
-      cdnScript.src = 'https://cdn.socket.io/4.6.0/socket.io.min.js';
-      cdnScript.onload = () => {
-        addLog('Socket.io loaded from CDN');
-        callback();
-      };
-      cdnScript.onerror = () => addLog('CRITICAL: All Socket.io stores failed');
-      document.head.appendChild(cdnScript);
-    };
-    document.head.appendChild(script);
+      // Fallback to CDN
+      loadSocketWithHack('https://cdn.socket.io/4.6.0/socket.io.min.js', callback, () => {
+        addLog('CRITICAL: All Socket.io providers failed to load.');
+        console.error('ChatWidget: Could not load socket.io client.');
+      });
+    });
   }
 
   // 4. WIDGET INITIALIZATION
@@ -745,9 +762,16 @@
 
     function initSocket() {
       addLog('Connecting to socket...');
-      socketInstance = io(SERVER_URL);
+
+      // Force polling first to bypass tough firewalls
+      socketInstance = io(SERVER_URL, {
+        transports: ['polling', 'websocket'],
+        reconnectionAttempts: 5
+      });
+
       socketInstance.on('connect', () => {
         addLog('Socket Connected! ID: ' + socketInstance.id);
+        console.log('ChatWidget: Socket Connected');
         socketInstance.emit('join_conversation', { visitorId });
 
         // Remove any connection error toasts
@@ -757,6 +781,7 @@
 
       socketInstance.on('connect_error', (err) => {
         addLog('Connection Error: ' + err.message);
+        console.error('ChatWidget: Socket Connection Error:', err);
 
         // Show persistent error toast
         let toast = chatWindow.querySelector('.connection-toast');
