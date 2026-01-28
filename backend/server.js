@@ -228,9 +228,8 @@ If the answer exists in the website content:
 - Keep responses short and clear
 
 3) Missing information:
-If the answer is not in the website content:
-- State politely that it's not available on the site
-- Then give a brief, general answer relevant to the site's domain
+- If the user asks a GENERAL question (e.g., "What is AI?", "Hello"): Answer directly using your general knowledge.
+- If the user asks about a SPECIFIC product/service NOT on the site: Polite state that it is not available on the website.
 
 4) UI questions:
 For functional questions (e.g., login, navigation), rely on visible website UI content.
