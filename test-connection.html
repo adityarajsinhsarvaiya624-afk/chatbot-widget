@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Connection Tester</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .log-box {
+            background: #f0f0f0;
+            padding: 15px;
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            font-family: monospace;
+        }
+
+        .log-item {
+            margin: 5px 0;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 2px;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+
+        .info {
+            color: blue;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Chatbot Connection Tester</h1>
+    <p>This tool will test the connection to your chatbot server regardless of Magento.</p>
+
+    <div>
+        <label>Server URL:</label>
+        <input type="text" id="serverUrl" value="https://chatbot-widget-ghh8.onrender.com"
+            style="width: 300px; padding: 5px;">
+        <button onclick="startTest()">Start Test</button>
+    </div>
+
+    <div class="log-box" id="logs"></div>
+
+    <!-- Load Socket.io directly from CDN -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+
+    <script>
+        const logs = document.getElementById('logs');
+
+        function log(msg, type = 'normal') {
+            const div = document.createElement('div');
+            div.className = 'log-item ' + type;
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logs.appendChild(div);
+            logs.scrollTop = logs.scrollHeight; // Auto scroll
+        }
+
+        async function startTest() {
+            logs.innerHTML = '';
+            const url = document.getElementById('serverUrl').value.replace(/\/$/, '');
+
+            log(`Starting test for: ${url}`, 'info');
+
+            // 1. HTTP Availability Check
+            log('Step 1: Checking HTTP Accessibility...', 'info');
+            try {
+                const start = Date.now();
+                const res = await fetch(url);
+                const time = Date.now() - start;
+                if (res.ok) {
+                    log(`HTTP Check Passed! Status: ${res.status} (${time}ms)`, 'success');
+                } else {
+                    log(`HTTP Check Failed. Status: ${res.status}`, 'error');
+                }
+            } catch (e) {
+                log(`HTTP Check Access Error: ${e.message}`, 'error');
+                log('Note: If this fails, the server might be down or blocking Cross-Origin requests.', 'normal');
+            }
+
+            // 2. Socket.io File Check
+            log('Step 2: Checking Socket.io Client File on Server...', 'info');
+            try {
+                const res = await fetch(`${url}/socket.io/socket.io.js`);
+                if (res.ok) {
+                    log('Socket.io Client File is reachable!', 'success');
+                } else {
+                    log(`Socket.io Client File unreachable. Status: ${res.status}`, 'error');
+                }
+            } catch (e) {
+                log(`Socket.io File Access Error: ${e.message}`, 'error');
+            }
+
+            // 3. Socket Connection Test
+            log('Step 3: Testing Socket Connection (Polling + Websocket)...', 'info');
+
+            if (typeof io === 'undefined') {
+                log('CRITICAL: Socket.io library not loaded in this tester page.', 'error');
+                return;
+            }
+
+            const socket = io(url, {
+                transports: ['polling', 'websocket'], // Force polling first
+                reconnectionAttempts: 2,
+                timeout: 10000
+            });
+
+            socket.on('connect', () => {
+                log(`Socket Connected Successfully! ID: ${socket.id}`, 'success');
+                log(`Transport used: ${socket.io.engine.transport.name}`, 'success');
+                socket.disconnect();
+            });
+
+            socket.on('connect_error', (err) => {
+                log(`Socket Connection Failed: ${err.message}`, 'error');
+                console.error(err);
+            });
+
+            socket.on('disconnect', (reason) => {
+                log(`Socket Disconnected: ${reason}`, 'normal');
+            });
+        }
+    </script>
+</body>
+
+</html>

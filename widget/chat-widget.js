@@ -763,10 +763,12 @@
     function initSocket() {
       addLog('Connecting to socket...');
 
-      // Force polling first to bypass tough firewalls
+      // Force polling ONLY to bypass strict firewalls/WAFs that block WebSockets
       socketInstance = io(SERVER_URL, {
-        transports: ['polling', 'websocket'],
-        reconnectionAttempts: 5
+        transports: ['polling'],
+        upgrade: false, // Disable upgrade to WebSocket
+        reconnectionAttempts: 10,
+        timeout: 20000
       });
 
       socketInstance.on('connect', () => {
