@@ -60,7 +60,8 @@
     logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
     console.log('[ChatWidget]', msg);
   }
-  addLog('Script started');
+  addLog('Script started [v1.1 Polling Fix]');
+  console.log('%c ChatWidget v1.1 (Polling Fix) Loaded ', 'background: #222; color: #bada55; padding: 4px; border-radius: 4px;');
   addLog('Detected Server: ' + SERVER_URL);
 
   function showDebugLogs() {
