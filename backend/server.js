@@ -273,7 +273,7 @@ RULES:
                         { role: 'system', content: systemPrompt },
                         ...history
                     ],
-                    model: 'llama-3.3-70b-versatile',
+                    model: process.env.AI_MODEL || 'llama-3.3-70b-versatile',
                     stream: true,
                 });
 
