@@ -23,7 +23,7 @@
         } catch (e) { }
       }
     }
-    return 'http://localhost:5001';
+    return `${window.location.protocol}//localhost:5001`;
   };
   const SERVER_URL = getScriptSource();
 

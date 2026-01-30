@@ -226,45 +226,32 @@ RULES:
             let scrapedContext = "";
             let currentUrl = "";
 
+            // -------------------------------------------
+
+
+            // 1. Internal Search (Crawler)
             if (siteContext) {
                 try {
                     const contextObj = typeof siteContext === 'string' ? JSON.parse(siteContext) : siteContext;
-
-                    // Extract URL to find matching scraped data
                     if (contextObj.pageContent && contextObj.pageContent.url) {
-                        try {
-                            currentUrl = contextObj.pageContent.url;
-
-                            // SEARCH LOGIC: Instead of full domain context, we search for query-relevant chunks
-                            console.log(`[RAG] Searching knowledge base for: "${content}"`);
-                            // Optimization: Fetch only top 3 chunks instead of 5 to save tokens
-                            // Optimization: Fetch only top 2 chunks to save tokens
-                            const relevantChunks = await knowledgeIndex.search(content, 2);
-                            scrapedContext = knowledgeIndex.formatContext(relevantChunks);
-
-                        } catch (e) {
-                            console.error('[RAG] Search error:', e);
-                        }
+                        currentUrl = contextObj.pageContent.url;
+                        console.log(`[RAG] Searching internal knowledge for: "${content}"`);
+                        const relevantChunks = await knowledgeIndex.search(content, 2);
+                        scrapedContext = knowledgeIndex.formatContext(relevantChunks);
                     }
-
                     if (Object.keys(contextObj).length > 0) {
                         systemPrompt += "\n\nWEBSITE VISIBLE CONTENT (Current Page):\n" + JSON.stringify(contextObj, null, 2);
-                    } else {
-                        systemPrompt += "\n\nWEBSITE VISIBLE CONTENT: (Empty)";
                     }
                 } catch (e) {
-                    console.error('Error parsing siteContext in server:', e);
-                    systemPrompt += "\n\nWEBSITE VISIBLE CONTENT: (Error parsing content)";
+                    console.error('Error parsing siteContext:', e);
                 }
-            } else {
-                systemPrompt += "\n\nWEBSITE VISIBLE CONTENT: (None provided)";
             }
 
-            // ADD SEARCHED KNOWLEDGE BASE
+            // ADD INTERNAL KNOWLEDGE BASE
             if (scrapedContext) {
-                systemPrompt += `\n\nRELEVANT WEBSITE KNOWLEDGE (Found via search):\n` + scrapedContext;
+                systemPrompt += `\n\nINTERNAL WEBSITE KNOWLEDGE:\n` + scrapedContext;
             } else {
-                systemPrompt += "\n\nRELEVANT WEBSITE KNOWLEDGE: (No relevant data found for this specific query)";
+                systemPrompt += "\n\nKNOWLEDGE BASE: (No relevant data found)";
             }
 
             try {
