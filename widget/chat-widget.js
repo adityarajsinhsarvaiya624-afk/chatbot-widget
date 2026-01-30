@@ -55,44 +55,12 @@
     visitorId = 'visitor_' + Math.random().toString(36).substr(2, 9);
   }
 
-  const logs = [];
   function addLog(msg) {
-    logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
     console.log('[ChatWidget]', msg);
   }
   addLog('Script started [v1.1 Polling Fix]');
   console.log('%c ChatWidget v1.1 (Polling Fix) Loaded ', 'background: #222; color: #bada55; padding: 4px; border-radius: 4px;');
   addLog('Detected Server: ' + SERVER_URL);
-
-  function showDebugLogs() {
-    const existing = document.getElementById('chat-debug-box');
-    if (existing) {
-      existing.remove();
-      return;
-    }
-    const d = document.createElement('div');
-    d.id = 'chat-debug-box';
-    d.style.cssText = "position:fixed;top:0;left:0;width:100%;height:300px;background:rgba(0,0,0,0.9);color:#0f0;font-family:monospace;font-size:11px;overflow:auto;z-index:2147483647;padding:10px;border-bottom:2px solid white;pointer-events:auto;";
-    d.innerHTML = "<strong>Chat Widget Debug Logs (Triple-tap anywhere to close)</strong><hr>" + logs.join('<br>');
-    document.body.appendChild(d);
-    d.addEventListener('click', () => d.remove());
-  }
-
-  let lastTap = 0;
-  let tapCount = 0;
-  document.addEventListener('touchstart', (e) => {
-    const now = Date.now();
-    if (now - lastTap < 300) {
-      tapCount++;
-      if (tapCount >= 2) {
-        showDebugLogs();
-        tapCount = 0;
-      }
-    } else {
-      tapCount = 0;
-    }
-    lastTap = now;
-  }, { passive: true });
 
   // 3. LAZY SOCKET LOADING
   let socketInstance = null;
