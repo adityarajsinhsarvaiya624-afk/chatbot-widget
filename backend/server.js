@@ -14,10 +14,10 @@ const knowledgeIndex = require('./embeddings');
 let siteKnowledgeStore = new Map();
 
 // Initialize Groq
-const Groq = require('groq-sdk');
-// Handle the variable name the user actually used (GEMINI_API_KEY) or standard AI_API_KEY or GROQ_API_KEY
-const apiKey = process.env.GEMINI_API_KEY_CHATBOT || process.env.GEMINI_API_KEY || process.env.AI_API_KEY || process.env.GROQ_API_KEY;
-const groq = new Groq({ apiKey: apiKey });
+// Initialize OpenAI
+const OpenAI = require('openai');
+const apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY_CHATBOT; // Fallback for backward compatibility
+const openai = new OpenAI({ apiKey: apiKey });
 console.log('AI Initialized with key length:', apiKey ? apiKey.length : 0);
 
 const app = express();
@@ -201,8 +201,7 @@ io.on('connection', (socket) => {
             // Broadcast to room
             io.to(conversation._id).emit('receive_message', userMessage);
 
-            // --- GROQ AI LOGIC ---
-            // Get last 6 messages for context (Reduced from 10 to save tokens)
+            // --- OPENAI LOGIC ---
             // Get last 4 messages for context (Reduced from 6 to save tokens)
             const recentMessages = conversationMsgs.slice(-4);
 
@@ -255,12 +254,12 @@ RULES:
             }
 
             try {
-                const stream = await groq.chat.completions.create({
+                const stream = await openai.chat.completions.create({
                     messages: [
                         { role: 'system', content: systemPrompt },
                         ...history
                     ],
-                    model: process.env.AI_MODEL || 'llama-3.3-70b-versatile',
+                    model: process.env.AI_MODEL || 'gpt-4o',
                     stream: true,
                 });
 
@@ -293,7 +292,7 @@ RULES:
                 console.log(`INFO: AI streaming completed: ${botMessage._id}`);
 
             } catch (aiError) {
-                console.error('Groq API Error:', aiError);
+                console.error('OpenAI API Error:', aiError);
                 const errorMessage = {
                     _id: generateId(),
                     conversationId: conversation._id,
