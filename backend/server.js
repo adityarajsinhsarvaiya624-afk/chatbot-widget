@@ -203,8 +203,7 @@ io.on('connection', (socket) => {
             io.to(conversation._id).emit('receive_message', userMessage);
 
             // --- GROQ AI LOGIC ---
-            // Get last 6 messages for context (Reduced from 10 to save tokens)
-            // Get last 4 messages for context (Reduced from 6 to save tokens)
+            // Get last 4 messages for context (History Reduced to save tokens)
             const recentMessages = conversationMsgs.slice(-4);
 
             const history = recentMessages.map(m => ({
