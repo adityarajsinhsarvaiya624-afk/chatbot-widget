@@ -31,11 +31,8 @@
         } catch (e) { }
       }
     }
-    // Default to the user's backend port (9889)
-    return `${window.location.protocol}//localhost:9889`;
   };
   const SERVER_URL = getScriptSource();
-  const VERSION = "1.2.0 (WebSocket Fix)";
 
   // THEME CONFIGURATION
   const scriptTag = document.currentScript || document.querySelector('script[src*="chat-widget.js"]');
@@ -66,11 +63,8 @@
   }
 
   function addLog(msg) {
-    console.log('[ChatWidget]', msg);
+    // console.log('[ChatWidget]', msg); // Disabled logs
   }
-  addLog('Script started [v' + VERSION + ']');
-  console.log('%c ChatWidget v' + VERSION + ' Loaded ', 'background: #222; color: #bada55; padding: 4px; border-radius: 4px;');
-  addLog('Detected Server: ' + SERVER_URL);
 
   // 3. LAZY SOCKET LOADING
   let socketInstance = null;
