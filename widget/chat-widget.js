@@ -30,110 +30,111 @@
           return new URL(s.src).origin;
         } catch (e) { }
       }
-      // Default to the user's backend port (9889)
-      return `${window.location.protocol}//localhost:9889`;
-    };
-    const SERVER_URL = getScriptSource();
-
-    // THEME CONFIGURATION
-    const scriptTag = document.currentScript || document.querySelector('script[src*="chat-widget.js"]');
-    let siteContext = {};
-    try {
-      const rawContext = scriptTag?.getAttribute('data-site-context');
-      if (rawContext) siteContext = JSON.parse(rawContext);
-    } catch (e) {
-      console.error('ChatWidget: Failed to parse data-site-context', e);
     }
+    // Default to the user's backend port (9889)
+    return `${window.location.protocol}//localhost:9889`;
+  };
+  const SERVER_URL = getScriptSource();
 
-    const CONFIG = {
-      primaryColor: scriptTag?.getAttribute('data-primary-color') || '#007bff',
-      botName: scriptTag?.getAttribute('data-bot-name') || 'Chat Support',
-      welcomeMessage: scriptTag?.getAttribute('data-welcome-message') || 'How can I help you today?'
-    };
+  // THEME CONFIGURATION
+  const scriptTag = document.currentScript || document.querySelector('script[src*="chat-widget.js"]');
+  let siteContext = {};
+  try {
+    const rawContext = scriptTag?.getAttribute('data-site-context');
+    if (rawContext) siteContext = JSON.parse(rawContext);
+  } catch (e) {
+    console.error('ChatWidget: Failed to parse data-site-context', e);
+  }
 
-    // 2. VISITOR ID & LOGGING
-    let visitorId;
-    try {
-      visitorId = sessionStorage.getItem('chat_visitor_id');
-      if (!visitorId) {
-        visitorId = 'visitor_' + Math.random().toString(36).substr(2, 9);
-        sessionStorage.setItem('chat_visitor_id', visitorId);
-      }
-    } catch (e) {
+  const CONFIG = {
+    primaryColor: scriptTag?.getAttribute('data-primary-color') || '#007bff',
+    botName: scriptTag?.getAttribute('data-bot-name') || 'Chat Support',
+    welcomeMessage: scriptTag?.getAttribute('data-welcome-message') || 'How can I help you today?'
+  };
+
+  // 2. VISITOR ID & LOGGING
+  let visitorId;
+  try {
+    visitorId = sessionStorage.getItem('chat_visitor_id');
+    if (!visitorId) {
       visitorId = 'visitor_' + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem('chat_visitor_id', visitorId);
+    }
+  } catch (e) {
+    visitorId = 'visitor_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  function addLog(msg) {
+    // console.log('[ChatWidget]', msg); // Disabled logs
+  }
+
+  // 3. LAZY SOCKET LOADING
+  let socketInstance = null;
+
+  function loadSocketWithHack(url, callback, onError) {
+    // REQUIREJS HACK: Magento uses RequireJS which hijacks socket.io. 
+    // We temporarily hide 'define' so socket.io attaches to window.io globally.
+    const backupDefine = window.define;
+    if (window.define) {
+      window.define = null;
+      addLog('RequireJS detected. Temporarily disabled "define" for Socket.io load.');
     }
 
-    function addLog(msg) {
-      // console.log('[ChatWidget]', msg); // Disabled logs
+    const script = document.createElement('script');
+    script.src = url;
+    script.onload = () => {
+      if (backupDefine) window.define = backupDefine; // Restore RequireJS
+      addLog(`Socket.io loaded from ${url}`);
+      callback();
+    };
+    script.onerror = () => {
+      if (backupDefine) window.define = backupDefine; // Restore RequireJS
+      addLog(`Failed to load Socket.io from ${url}`);
+      if (onError) onError();
+    };
+    document.head.appendChild(script);
+  }
+
+  function loadSocketIO(callback) {
+    if (window.io) {
+      callback();
+      return;
     }
+    addLog('Loading Socket.io...');
 
-    // 3. LAZY SOCKET LOADING
-    let socketInstance = null;
+    // Try Local/Server version first (guarantees version match)
+    const localUrl = `${SERVER_URL}/socket.io/socket.io.js`;
 
-    function loadSocketWithHack(url, callback, onError) {
-      // REQUIREJS HACK: Magento uses RequireJS which hijacks socket.io. 
-      // We temporarily hide 'define' so socket.io attaches to window.io globally.
-      const backupDefine = window.define;
-      if (window.define) {
-        window.define = null;
-        addLog('RequireJS detected. Temporarily disabled "define" for Socket.io load.');
-      }
-
-      const script = document.createElement('script');
-      script.src = url;
-      script.onload = () => {
-        if (backupDefine) window.define = backupDefine; // Restore RequireJS
-        addLog(`Socket.io loaded from ${url}`);
-        callback();
-      };
-      script.onerror = () => {
-        if (backupDefine) window.define = backupDefine; // Restore RequireJS
-        addLog(`Failed to load Socket.io from ${url}`);
-        if (onError) onError();
-      };
-      document.head.appendChild(script);
-    }
-
-    function loadSocketIO(callback) {
-      if (window.io) {
-        callback();
-        return;
-      }
-      addLog('Loading Socket.io...');
-
-      // Try Local/Server version first (guarantees version match)
-      const localUrl = `${SERVER_URL}/socket.io/socket.io.js`;
-
-      loadSocketWithHack(localUrl, callback, () => {
-        addLog('Failed local load, trying CDN...');
-        // Fallback to CDN
-        loadSocketWithHack('https://cdn.socket.io/4.6.0/socket.io.min.js', callback, () => {
-          addLog('CRITICAL: All Socket.io providers failed to load.');
-          console.error('ChatWidget: Could not load socket.io client.');
-        });
+    loadSocketWithHack(localUrl, callback, () => {
+      addLog('Failed local load, trying CDN...');
+      // Fallback to CDN
+      loadSocketWithHack('https://cdn.socket.io/4.6.0/socket.io.min.js', callback, () => {
+        addLog('CRITICAL: All Socket.io providers failed to load.');
+        console.error('ChatWidget: Could not load socket.io client.');
       });
+    });
+  }
+
+  // 4. WIDGET INITIALIZATION
+  function initWidget() {
+    addLog('Initializing Widget UI...');
+
+    // Helper to darken/lighten hex color
+    function adjustColor(color, amount) {
+      return '#' + color.replace(/^#/, '').replace(/../g, color => ('0' + Math.min(255, Math.max(0, parseInt(color, 16) + amount)).toString(16)).substr(-2));
     }
 
-    // 4. WIDGET INITIALIZATION
-    function initWidget() {
-      addLog('Initializing Widget UI...');
+    const container = document.createElement('div');
+    container.id = 'chat-widget-container';
+    container.style.position = 'fixed';
+    container.style.inset = '0';
+    container.style.pointerEvents = 'none';
+    container.style.zIndex = '2147483647';
+    document.body.appendChild(container);
 
-      // Helper to darken/lighten hex color
-      function adjustColor(color, amount) {
-        return '#' + color.replace(/^#/, '').replace(/../g, color => ('0' + Math.min(255, Math.max(0, parseInt(color, 16) + amount)).toString(16)).substr(-2));
-      }
-
-      const container = document.createElement('div');
-      container.id = 'chat-widget-container';
-      container.style.position = 'fixed';
-      container.style.inset = '0';
-      container.style.pointerEvents = 'none';
-      container.style.zIndex = '2147483647';
-      document.body.appendChild(container);
-
-      const shadow = container.attachShadow({ mode: 'open' });
-      const style = document.createElement('style');
-      style.textContent = `
+    const shadow = container.attachShadow({ mode: 'open' });
+    const style = document.createElement('style');
+    style.textContent = `
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
       :host {
@@ -467,27 +468,27 @@
         }
       }
     `;
-      shadow.appendChild(style);
+    shadow.appendChild(style);
 
-      // SVG Icons
-      // SVG Icons (Lucide-style Rounded)
-      const ICONS = {
-        msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
-        close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
-        send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
-        down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
-      };
+    // SVG Icons
+    // SVG Icons (Lucide-style Rounded)
+    const ICONS = {
+      msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
+      close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
+      send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>',
+      down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
+    };
 
-      const chatButton = document.createElement('button');
-      chatButton.className = 'chat-button';
-      chatButton.innerHTML = `
+    const chatButton = document.createElement('button');
+    chatButton.className = 'chat-button';
+    chatButton.innerHTML = `
       <div class="msg-icon">${ICONS.msg}</div>
       <div class="close-icon">${ICONS.close}</div>
     `;
 
-      const chatWindow = document.createElement('div');
-      chatWindow.className = 'chat-window';
-      chatWindow.innerHTML = `
+    const chatWindow = document.createElement('div');
+    chatWindow.className = 'chat-window';
+    chatWindow.innerHTML = `
       <div class="chat-header">
         <div class="header-info">
           <span class="bot-name">${CONFIG.botName}</span>
@@ -503,423 +504,423 @@
       </div>
     `;
 
-      shadow.appendChild(chatButton);
-      shadow.appendChild(chatWindow);
+    shadow.appendChild(chatButton);
+    shadow.appendChild(chatWindow);
 
-      const messagesContainer = chatWindow.querySelector('#messages');
-      const input = chatWindow.querySelector('.chat-input');
-      const sendBtn = chatWindow.querySelector('.send-btn');
-      const minBtn = chatWindow.querySelector('.min-btn');
+    const messagesContainer = chatWindow.querySelector('#messages');
+    const input = chatWindow.querySelector('.chat-input');
+    const sendBtn = chatWindow.querySelector('.send-btn');
+    const minBtn = chatWindow.querySelector('.min-btn');
 
-      // SHOW WELCOME MESSAGE IMMEDIATELY (OFFLINE MODE)
-      // This ensures the user sees something even if the server is slow to connect
-      if (CONFIG.welcomeMessage) {
-        addMessage(CONFIG.welcomeMessage, 'bot', null, [
-          "Tell me about extensions",
-          "Contact Support",
-          "How to install?"
-        ]);
-      }
+    // SHOW WELCOME MESSAGE IMMEDIATELY (OFFLINE MODE)
+    // This ensures the user sees something even if the server is slow to connect
+    if (CONFIG.welcomeMessage) {
+      addMessage(CONFIG.welcomeMessage, 'bot', null, [
+        "Tell me about extensions",
+        "Contact Support",
+        "How to install?"
+      ]);
+    }
 
-      let isOpen = false;
-      function toggleChat() {
-        isOpen = !isOpen;
-        if (isOpen) {
-          chatWindow.style.display = 'flex';
-          chatWindow.offsetHeight; // Force reflow
-          chatWindow.classList.add('open');
-          chatButton.classList.add('open');
-          input.focus();
-          scrollToBottom();
+    let isOpen = false;
+    function toggleChat() {
+      isOpen = !isOpen;
+      if (isOpen) {
+        chatWindow.style.display = 'flex';
+        chatWindow.offsetHeight; // Force reflow
+        chatWindow.classList.add('open');
+        chatButton.classList.add('open');
+        input.focus();
+        scrollToBottom();
 
-          // Load socket if not loaded
-          if (!socketInstance) {
-            // REQUIREJS HACK: Magento uses RequireJS which hijacks socket.io. 
-            // We temporarily hide 'define' so socket.io attaches to window.io globally.
-            const backupDefine = window.define;
-            window.define = null;
+        // Load socket if not loaded
+        if (!socketInstance) {
+          // REQUIREJS HACK: Magento uses RequireJS which hijacks socket.io. 
+          // We temporarily hide 'define' so socket.io attaches to window.io globally.
+          const backupDefine = window.define;
+          window.define = null;
 
-            // Priority: Try CDN first for reliability on external sites
-            const cdnScript = document.createElement('script');
-            cdnScript.src = 'https://cdn.socket.io/4.6.0/socket.io.min.js';
-            cdnScript.onload = () => {
-              if (backupDefine) window.define = backupDefine; // Restore RequireJS
-              addLog('Socket.io loaded from CDN');
-              initSocket();
-            };
-            cdnScript.onerror = () => {
-              if (backupDefine) window.define = backupDefine; // Restore RequireJS
-              // Fallback to local
-              loadSocketIO(initSocket);
-            };
-            document.head.appendChild(cdnScript);
-          }
-        } else {
-          chatWindow.classList.remove('open');
-          chatButton.classList.remove('open');
-          setTimeout(() => {
-            if (!isOpen) chatWindow.style.display = 'none';
-          }, 300);
+          // Priority: Try CDN first for reliability on external sites
+          const cdnScript = document.createElement('script');
+          cdnScript.src = 'https://cdn.socket.io/4.6.0/socket.io.min.js';
+          cdnScript.onload = () => {
+            if (backupDefine) window.define = backupDefine; // Restore RequireJS
+            addLog('Socket.io loaded from CDN');
+            initSocket();
+          };
+          cdnScript.onerror = () => {
+            if (backupDefine) window.define = backupDefine; // Restore RequireJS
+            // Fallback to local
+            loadSocketIO(initSocket);
+          };
+          document.head.appendChild(cdnScript);
         }
+      } else {
+        chatWindow.classList.remove('open');
+        chatButton.classList.remove('open');
+        setTimeout(() => {
+          if (!isOpen) chatWindow.style.display = 'none';
+        }, 300);
       }
+    }
 
-      chatButton.addEventListener('click', toggleChat);
-      minBtn.addEventListener('click', toggleChat);
+    chatButton.addEventListener('click', toggleChat);
+    minBtn.addEventListener('click', toggleChat);
 
-      function scrollToBottom(force = false) {
-        const threshold = 50;
-        const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < threshold;
-        if (force || isAtBottom) {
-          messagesContainer.scrollTo({
-            top: messagesContainer.scrollHeight,
-            behavior: force ? 'auto' : 'smooth'
-          });
-        }
+    function scrollToBottom(force = false) {
+      const threshold = 50;
+      const isAtBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < threshold;
+      if (force || isAtBottom) {
+        messagesContainer.scrollTo({
+          top: messagesContainer.scrollHeight,
+          behavior: force ? 'auto' : 'smooth'
+        });
       }
+    }
 
-      function scrollToElement(el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+    function scrollToElement(el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
-      function parseMarkdown(text) {
-        if (!text) return '';
+    function parseMarkdown(text) {
+      if (!text) return '';
 
-        let lines = text.split('\n');
-        let output = '';
-        let inList = false;
-        let inTable = false;
-        let tableHeader = true;
+      let lines = text.split('\n');
+      let output = '';
+      let inList = false;
+      let inTable = false;
+      let tableHeader = true;
 
-        lines.forEach(line => {
-          let trimmed = line.trim();
+      lines.forEach(line => {
+        let trimmed = line.trim();
 
-          // Escape HTML for safety but keep our tags
-          let processed = trimmed
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
+        // Escape HTML for safety but keep our tags
+        let processed = trimmed
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
 
-          // Bold (**text**)
-          processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-          // Italic (*text*)
-          processed = processed.replace(/\*(.*?)\*/g, '<em>$1</em>');
-          // Simple Links (Sanitized)
-          processed = processed.replace(/\[(.*?)\]\((.*?)\)/g, (match, text, url) => {
-            // Security: Prevent javascript: or data: links
-            if (url.match(/^(javascript:|data:)/i)) return text;
-            return `<a href="${url}" target="_blank" style="color:${CONFIG.primaryColor}">${text}</a>`;
-          });
-
-          // TABLES
-          if (processed.includes('|') && (processed.match(/|/g) || []).length > 1) {
-            if (!inTable) {
-              output += '<table>';
-              inTable = true;
-              tableHeader = true;
-            }
-
-            // Skip the separator line |---|---|
-            if (processed.includes('---')) return;
-
-            const cells = processed.split('|').filter(c => c.trim() !== '' || (processed.startsWith('|') && processed.endsWith('|')));
-            const tag = tableHeader ? 'th' : 'td';
-            output += '<tr>';
-            cells.forEach(cell => {
-              if (cell.trim() === '' && !processed.includes('| |')) return;
-              output += `<${tag}>${cell.trim()}</${tag}>`;
-            });
-            output += '</tr>';
-            tableHeader = false;
-            return;
-          } else if (inTable) {
-            output += '</table>';
-            inTable = false;
-          }
-
-          // LISTS
-          if (processed.startsWith('- ')) {
-            if (!inList) {
-              output += '<ul>';
-              inList = true;
-            }
-            output += `<li>${processed.substring(2)}</li>`;
-          } else {
-            if (inList) {
-              output += '</ul>';
-              inList = false;
-            }
-            // Paragraphs for non-empty lines
-            if (processed.length > 0) {
-              output += `<p>${processed}</p>`;
-            }
-          }
+        // Bold (**text**)
+        processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        // Italic (*text*)
+        processed = processed.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        // Simple Links (Sanitized)
+        processed = processed.replace(/\[(.*?)\]\((.*?)\)/g, (match, text, url) => {
+          // Security: Prevent javascript: or data: links
+          if (url.match(/^(javascript:|data:)/i)) return text;
+          return `<a href="${url}" target="_blank" style="color:${CONFIG.primaryColor}">${text}</a>`;
         });
 
-        if (inList) output += '</ul>';
-        if (inTable) output += '</table>';
-        return output;
-      }
+        // TABLES
+        if (processed.includes('|') && (processed.match(/|/g) || []).length > 1) {
+          if (!inTable) {
+            output += '<table>';
+            inTable = true;
+            tableHeader = true;
+          }
 
-      function addMessage(text, sender, messageId = null, suggestions = []) {
-        const isNewMessage = messageId && !messagesContainer.querySelector(`[data-msg-id="${messageId}"]`);
-        removeTypingIndicator();
+          // Skip the separator line |---|---|
+          if (processed.includes('---')) return;
 
-        // Remove any existing suggestion chips before adding new ones
-        const oldChips = messagesContainer.querySelector('.suggestion-chips');
-        if (oldChips) oldChips.remove();
+          const cells = processed.split('|').filter(c => c.trim() !== '' || (processed.startsWith('|') && processed.endsWith('|')));
+          const tag = tableHeader ? 'th' : 'td';
+          output += '<tr>';
+          cells.forEach(cell => {
+            if (cell.trim() === '' && !processed.includes('| |')) return;
+            output += `<${tag}>${cell.trim()}</${tag}>`;
+          });
+          output += '</tr>';
+          tableHeader = false;
+          return;
+        } else if (inTable) {
+          output += '</table>';
+          inTable = false;
+        }
 
-        // If a message with this ID already exists (streaming update), update it
-        if (messageId && !isNewMessage) {
-          let existingMsg = messagesContainer.querySelector(`[data-msg-id="${messageId}"]`);
-          if (existingMsg) {
-            existingMsg.innerHTML = parseMarkdown(text);
-            scrollToBottom(); // Only scroll if already at bottom
-            return;
+        // LISTS
+        if (processed.startsWith('- ')) {
+          if (!inList) {
+            output += '<ul>';
+            inList = true;
+          }
+          output += `<li>${processed.substring(2)}</li>`;
+        } else {
+          if (inList) {
+            output += '</ul>';
+            inList = false;
+          }
+          // Paragraphs for non-empty lines
+          if (processed.length > 0) {
+            output += `<p>${processed}</p>`;
           }
         }
+      });
 
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `message ${sender}`;
-        if (messageId) msgDiv.setAttribute('data-msg-id', messageId);
+      if (inList) output += '</ul>';
+      if (inTable) output += '</table>';
+      return output;
+    }
 
-        // Use innerHTML instead of textContent to render the formatting
-        if (sender === 'bot') {
-          msgDiv.innerHTML = parseMarkdown(text);
-        } else {
-          msgDiv.textContent = text; // Keep user messages as plain text
-        }
-        messagesContainer.appendChild(msgDiv);
+    function addMessage(text, sender, messageId = null, suggestions = []) {
+      const isNewMessage = messageId && !messagesContainer.querySelector(`[data-msg-id="${messageId}"]`);
+      removeTypingIndicator();
 
-        // ADD CHIPS IF PROVIDED
-        if (suggestions && suggestions.length > 0) {
-          const chipContainer = document.createElement('div');
-          chipContainer.className = 'suggestion-chips';
-          suggestions.forEach(s => {
-            const chip = document.createElement('button');
-            chip.className = 'chip';
-            chip.textContent = s;
-            chip.onclick = () => {
-              input.value = s;
-              sendMessage();
-              chipContainer.remove();
-            };
-            chipContainer.appendChild(chip);
-          });
-          messagesContainer.appendChild(chipContainer);
-        }
+      // Remove any existing suggestion chips before adding new ones
+      const oldChips = messagesContainer.querySelector('.suggestion-chips');
+      if (oldChips) oldChips.remove();
 
-        if (sender === 'bot' && isNewMessage) {
-          // When a new bot message starts, make sure its beginning is visible
-          scrollToElement(msgDiv);
-        } else {
-          scrollToBottom(true); // Force scroll for user messages
+      // If a message with this ID already exists (streaming update), update it
+      if (messageId && !isNewMessage) {
+        let existingMsg = messagesContainer.querySelector(`[data-msg-id="${messageId}"]`);
+        if (existingMsg) {
+          existingMsg.innerHTML = parseMarkdown(text);
+          scrollToBottom(); // Only scroll if already at bottom
+          return;
         }
       }
 
-      function showTypingIndicator() {
-        if (messagesContainer.querySelector('.typing-indicator')) return;
-        const indicator = document.createElement('div');
-        indicator.className = 'typing-indicator';
-        indicator.innerHTML = `
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${sender}`;
+      if (messageId) msgDiv.setAttribute('data-msg-id', messageId);
+
+      // Use innerHTML instead of textContent to render the formatting
+      if (sender === 'bot') {
+        msgDiv.innerHTML = parseMarkdown(text);
+      } else {
+        msgDiv.textContent = text; // Keep user messages as plain text
+      }
+      messagesContainer.appendChild(msgDiv);
+
+      // ADD CHIPS IF PROVIDED
+      if (suggestions && suggestions.length > 0) {
+        const chipContainer = document.createElement('div');
+        chipContainer.className = 'suggestion-chips';
+        suggestions.forEach(s => {
+          const chip = document.createElement('button');
+          chip.className = 'chip';
+          chip.textContent = s;
+          chip.onclick = () => {
+            input.value = s;
+            sendMessage();
+            chipContainer.remove();
+          };
+          chipContainer.appendChild(chip);
+        });
+        messagesContainer.appendChild(chipContainer);
+      }
+
+      if (sender === 'bot' && isNewMessage) {
+        // When a new bot message starts, make sure its beginning is visible
+        scrollToElement(msgDiv);
+      } else {
+        scrollToBottom(true); // Force scroll for user messages
+      }
+    }
+
+    function showTypingIndicator() {
+      if (messagesContainer.querySelector('.typing-indicator')) return;
+      const indicator = document.createElement('div');
+      indicator.className = 'typing-indicator';
+      indicator.innerHTML = `
         <div class="typing-dot"></div>
         <div class="typing-dot"></div>
         <div class="typing-dot"></div>
       `;
-        messagesContainer.appendChild(indicator);
-        scrollToBottom();
-      }
+      messagesContainer.appendChild(indicator);
+      scrollToBottom();
+    }
 
-      function removeTypingIndicator() {
-        const indicator = messagesContainer.querySelector('.typing-indicator');
-        if (indicator) indicator.remove();
-      }
+    function removeTypingIndicator() {
+      const indicator = messagesContainer.querySelector('.typing-indicator');
+      if (indicator) indicator.remove();
+    }
 
-      function initSocket() {
-        addLog('Connecting to socket...');
+    function initSocket() {
+      addLog('Connecting to socket...');
 
-        // Allow both WebSockets and Polling for maximum compatibility
-        socketInstance = io(SERVER_URL, {
-          transports: ['websocket', 'polling'], // Allow WebSocket upgrade
-          reconnectionAttempts: 10,
-          timeout: 20000,
-          withCredentials: true
-        });
-
-        socketInstance.on('connect', () => {
-          addLog('Socket Connected! ID: ' + socketInstance.id);
-          console.log('ChatWidget: Socket Connected');
-          socketInstance.emit('join_conversation', { visitorId });
-
-          // Remove any connection error toasts
-          const existingToast = chatWindow.querySelector('.connection-toast');
-          if (existingToast) existingToast.remove();
-        });
-
-        socketInstance.on('connect_error', (err) => {
-          addLog('Connection Error: ' + err.message);
-          console.error('ChatWidget: Socket Connection Error:', err);
-
-          // Show persistent error toast
-          let toast = chatWindow.querySelector('.connection-toast');
-          if (!toast) {
-            toast = document.createElement('div');
-            toast.className = 'connection-toast';
-            toast.style.cssText = "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(220, 38, 38, 0.95);color:white;padding:8px 12px;border-radius:4px;font-size:11px;font-weight:500;z-index:100;text-align:center;width:80%;pointer-events:none;";
-            chatWindow.appendChild(toast);
-          }
-          toast.textContent = `Connection Failed: ${err.message}. Retrying...`;
-        });
-
-        socketInstance.on('chat_history', (history) => {
-          messagesContainer.innerHTML = '';
-          if (history.length === 0 && CONFIG.welcomeMessage) {
-            addMessage(CONFIG.welcomeMessage, 'bot', null, [
-              "Tell me about extensions",
-              "Contact Support",
-              "How to install?"
-            ]);
-          }
-          history.forEach(msg => {
-            addMessage(msg.content, msg.sender === 'user' ? 'user' : 'bot');
-          });
-        });
-        socketInstance.on('receive_message', (msg) => {
-          if (msg.sender === 'user') return; // Optimistic UI: We already showed this
-          addMessage(msg.content, 'bot', msg._id);
-        });
-
-        const streamingMessages = {};
-
-        socketInstance.on('chat_chunk', (chunk) => {
-          removeTypingIndicator();
-          const msgId = chunk._id;
-          if (!streamingMessages[msgId]) {
-            streamingMessages[msgId] = "";
-          }
-          streamingMessages[msgId] += chunk.content;
-          addMessage(streamingMessages[msgId], 'bot', msgId);
-        });
-      }
-
-      function getPageContent() {
-        try {
-          const title = document.title;
-          const metaDesc = document.querySelector('meta[name="description"]')?.content || "";
-          const h1s = Array.from(document.querySelectorAll('h1')).map(h => h.innerText).join('; ');
-          const h2s = Array.from(document.querySelectorAll('h2')).map(h => h.innerText).join('; ');
-
-          // EXTRACT INTERACTIVE ELEMENTS (Functional Map)
-          const interactives = [];
-          const selector = 'button, input, a, select, [role="button"]';
-          document.querySelectorAll(selector).forEach(el => {
-            // Ignore the chatbot's own elements
-            if (el.closest('#chat-widget-container') || el.closest('#chat-debug-box')) return;
-
-            const label = el.innerText || el.getAttribute('aria-label') || el.placeholder || el.title || el.value;
-            if (label && label.length < 100) { // Only grab concise labels
-              interactives.push(`${el.tagName.toLowerCase()}: "${label.trim()}"`);
-            }
-          });
-
-          // Get visible text, excluding scripts and styles
-          const bodyClone = document.body.cloneNode(true);
-          // Remove known widget elements and scripts/styles from the clone
-          const toRemove = bodyClone.querySelectorAll('script, style, #chat-widget-container, #chat-debug-box');
-          toRemove.forEach(el => el.remove());
-
-          const bodyText = bodyClone.innerText.replace(/\s+/g, ' ').trim().substring(0, 5000); // Limit to 5000 chars
-
-          return {
-            title,
-            url: window.location.href,
-            description: metaDesc,
-            headings: { h1: h1s, h2: h2s },
-            uiMap: interactives.slice(0, 50), // Limit to top 50 elements
-            contentSnippet: bodyText
-          };
-        } catch (e) {
-          console.error('ChatWidget: Extraction failed', e);
-          return { error: 'Extraction failed' };
-        }
-      }
-
-      function sendMessage() {
-        const text = input.value.trim();
-        if (!text) return;
-
-        // Check purely for connection
-        if (!socketInstance || !socketInstance.connected) {
-          addLog('ERROR: Socket not connected. Showing alert.');
-
-          const toast = document.createElement('div');
-          toast.textContent = "Connecting to server... please wait.";
-          toast.style.cssText = "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(255, 69, 0, 0.9);color:white;padding:8px 12px;border-radius:4px;font-size:12px;font-weight:600;opacity:0;transition:opacity 0.3s;pointer-events:none;";
-          chatWindow.appendChild(toast);
-          setTimeout(() => toast.style.opacity = '1', 10);
-          setTimeout(() => toast.remove(), 4000);
-
-          // Try to trigger connection if it dropped
-          if (socketInstance) socketInstance.connect();
-          return;
-        }
-
-        // 1. Optimistic UI: Show message immediately
-        addMessage(text, 'user');
-        input.value = '';
-
-        const dynamicContent = getPageContent();
-        const combinedContext = {
-          manualContext: siteContext,
-          pageContent: dynamicContent
-        };
-
-        socketInstance.emit('send_message', {
-          visitorId,
-          content: text,
-          siteContext: combinedContext
-        });
-        showTypingIndicator();
-      }
-
-      sendBtn.addEventListener('click', sendMessage);
-      input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
+      // Allow both WebSockets and Polling for maximum compatibility
+      socketInstance = io(SERVER_URL, {
+        transports: ['websocket', 'polling'], // Allow WebSocket upgrade
+        reconnectionAttempts: 10,
+        timeout: 20000,
+        withCredentials: true
       });
 
-      // PROACTIVE GREETING
-      setTimeout(() => {
-        if (!isOpen) {
-          const url = window.location.href.toLowerCase();
-          let proactiveMsg = "";
+      socketInstance.on('connect', () => {
+        addLog('Socket Connected! ID: ' + socketInstance.id);
+        console.log('ChatWidget: Socket Connected');
+        socketInstance.emit('join_conversation', { visitorId });
 
-          if (url.includes('pricing')) {
-            proactiveMsg = "I see you're checking our pricing! Need a hand choosing the right plan?";
-          } else if (url.includes('contact')) {
-            proactiveMsg = "Need help? You can message us right here for a quick answer!";
-          } else if (document.getElementById('chat-premium-demo')) { // Custom check for our demo
-            proactiveMsg = "Welcome to the Premium Demo! Try asking me about 'Recurring Payments'.";
-          }
+        // Remove any connection error toasts
+        const existingToast = chatWindow.querySelector('.connection-toast');
+        if (existingToast) existingToast.remove();
+      });
 
-          if (proactiveMsg) {
-            toggleChat();
-            // We add it as a bot message with a small delay so it feels natural
-            setTimeout(() => {
-              addMessage(proactiveMsg, 'bot', null, ["Learn more", "View all features"]);
-            }, 800);
-          }
+      socketInstance.on('connect_error', (err) => {
+        addLog('Connection Error: ' + err.message);
+        console.error('ChatWidget: Socket Connection Error:', err);
+
+        // Show persistent error toast
+        let toast = chatWindow.querySelector('.connection-toast');
+        if (!toast) {
+          toast = document.createElement('div');
+          toast.className = 'connection-toast';
+          toast.style.cssText = "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(220, 38, 38, 0.95);color:white;padding:8px 12px;border-radius:4px;font-size:11px;font-weight:500;z-index:100;text-align:center;width:80%;pointer-events:none;";
+          chatWindow.appendChild(toast);
         }
-      }, 5000);
+        toast.textContent = `Connection Failed: ${err.message}. Retrying...`;
+      });
+
+      socketInstance.on('chat_history', (history) => {
+        messagesContainer.innerHTML = '';
+        if (history.length === 0 && CONFIG.welcomeMessage) {
+          addMessage(CONFIG.welcomeMessage, 'bot', null, [
+            "Tell me about extensions",
+            "Contact Support",
+            "How to install?"
+          ]);
+        }
+        history.forEach(msg => {
+          addMessage(msg.content, msg.sender === 'user' ? 'user' : 'bot');
+        });
+      });
+      socketInstance.on('receive_message', (msg) => {
+        if (msg.sender === 'user') return; // Optimistic UI: We already showed this
+        addMessage(msg.content, 'bot', msg._id);
+      });
+
+      const streamingMessages = {};
+
+      socketInstance.on('chat_chunk', (chunk) => {
+        removeTypingIndicator();
+        const msgId = chunk._id;
+        if (!streamingMessages[msgId]) {
+          streamingMessages[msgId] = "";
+        }
+        streamingMessages[msgId] += chunk.content;
+        addMessage(streamingMessages[msgId], 'bot', msgId);
+      });
     }
 
-    // EXECUTE IMMEDIATELY
-    try {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initWidget);
-      } else {
-        initWidget();
+    function getPageContent() {
+      try {
+        const title = document.title;
+        const metaDesc = document.querySelector('meta[name="description"]')?.content || "";
+        const h1s = Array.from(document.querySelectorAll('h1')).map(h => h.innerText).join('; ');
+        const h2s = Array.from(document.querySelectorAll('h2')).map(h => h.innerText).join('; ');
+
+        // EXTRACT INTERACTIVE ELEMENTS (Functional Map)
+        const interactives = [];
+        const selector = 'button, input, a, select, [role="button"]';
+        document.querySelectorAll(selector).forEach(el => {
+          // Ignore the chatbot's own elements
+          if (el.closest('#chat-widget-container') || el.closest('#chat-debug-box')) return;
+
+          const label = el.innerText || el.getAttribute('aria-label') || el.placeholder || el.title || el.value;
+          if (label && label.length < 100) { // Only grab concise labels
+            interactives.push(`${el.tagName.toLowerCase()}: "${label.trim()}"`);
+          }
+        });
+
+        // Get visible text, excluding scripts and styles
+        const bodyClone = document.body.cloneNode(true);
+        // Remove known widget elements and scripts/styles from the clone
+        const toRemove = bodyClone.querySelectorAll('script, style, #chat-widget-container, #chat-debug-box');
+        toRemove.forEach(el => el.remove());
+
+        const bodyText = bodyClone.innerText.replace(/\s+/g, ' ').trim().substring(0, 5000); // Limit to 5000 chars
+
+        return {
+          title,
+          url: window.location.href,
+          description: metaDesc,
+          headings: { h1: h1s, h2: h2s },
+          uiMap: interactives.slice(0, 50), // Limit to top 50 elements
+          contentSnippet: bodyText
+        };
+      } catch (e) {
+        console.error('ChatWidget: Extraction failed', e);
+        return { error: 'Extraction failed' };
       }
-      addLog('Init sequence triggered');
-    } catch (err) {
-      addLog('CRITICAL INIT ERROR: ' + err.message);
     }
-  })();
+
+    function sendMessage() {
+      const text = input.value.trim();
+      if (!text) return;
+
+      // Check purely for connection
+      if (!socketInstance || !socketInstance.connected) {
+        addLog('ERROR: Socket not connected. Showing alert.');
+
+        const toast = document.createElement('div');
+        toast.textContent = "Connecting to server... please wait.";
+        toast.style.cssText = "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(255, 69, 0, 0.9);color:white;padding:8px 12px;border-radius:4px;font-size:12px;font-weight:600;opacity:0;transition:opacity 0.3s;pointer-events:none;";
+        chatWindow.appendChild(toast);
+        setTimeout(() => toast.style.opacity = '1', 10);
+        setTimeout(() => toast.remove(), 4000);
+
+        // Try to trigger connection if it dropped
+        if (socketInstance) socketInstance.connect();
+        return;
+      }
+
+      // 1. Optimistic UI: Show message immediately
+      addMessage(text, 'user');
+      input.value = '';
+
+      const dynamicContent = getPageContent();
+      const combinedContext = {
+        manualContext: siteContext,
+        pageContent: dynamicContent
+      };
+
+      socketInstance.emit('send_message', {
+        visitorId,
+        content: text,
+        siteContext: combinedContext
+      });
+      showTypingIndicator();
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    // PROACTIVE GREETING
+    setTimeout(() => {
+      if (!isOpen) {
+        const url = window.location.href.toLowerCase();
+        let proactiveMsg = "";
+
+        if (url.includes('pricing')) {
+          proactiveMsg = "I see you're checking our pricing! Need a hand choosing the right plan?";
+        } else if (url.includes('contact')) {
+          proactiveMsg = "Need help? You can message us right here for a quick answer!";
+        } else if (document.getElementById('chat-premium-demo')) { // Custom check for our demo
+          proactiveMsg = "Welcome to the Premium Demo! Try asking me about 'Recurring Payments'.";
+        }
+
+        if (proactiveMsg) {
+          toggleChat();
+          // We add it as a bot message with a small delay so it feels natural
+          setTimeout(() => {
+            addMessage(proactiveMsg, 'bot', null, ["Learn more", "View all features"]);
+          }, 800);
+        }
+      }
+    }, 5000);
+  }
+
+  // EXECUTE IMMEDIATELY
+  try {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initWidget);
+    } else {
+      initWidget();
+    }
+    addLog('Init sequence triggered');
+  } catch (err) {
+    addLog('CRITICAL INIT ERROR: ' + err.message);
+  }
+})();
