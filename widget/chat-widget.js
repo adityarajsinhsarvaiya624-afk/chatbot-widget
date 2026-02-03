@@ -12,6 +12,11 @@
       return new URL(script.src).origin;
     }
 
+    // Auto-detect Render origin
+    if (window.location.hostname.endsWith('.onrender.com')) {
+      return window.location.origin;
+    }
+
     // Check if we are running locally on common ports
     if (window.location.origin.includes(':5001') || window.location.origin.includes(':9889') || window.location.origin.includes(':3000')) {
       return window.location.origin;
