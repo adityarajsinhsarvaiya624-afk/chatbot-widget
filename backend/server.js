@@ -211,9 +211,7 @@ io.on('connection', (socket) => {
                 content: m.content
             }));
 
-            // Prepare System Prompt with optional Site Context
             // Strict Behavior Rules for the Chatbot
-            // Concisie System Prompt (Token Optimized)
             let systemPrompt = `Role: Helpful website chatbot.
 RULES:
 1. Ambiguity: If vague, ask clarifying questions using provided knowledge.
@@ -316,5 +314,5 @@ RULES:
     });
 });
 
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 9889;
 server.listen(PORT, () => console.log(`In-Memory Chat Server running on port ${PORT}`));
