@@ -11,9 +11,12 @@
     if (script && script.src && script.src.startsWith('http')) {
       return new URL(script.src).origin;
     }
-    if (window.location.origin.includes(':5001')) {
+
+    // Check if we are running locally on common ports
+    if (window.location.origin.includes(':5001') || window.location.origin.includes(':9889') || window.location.origin.includes(':3000')) {
       return window.location.origin;
     }
+
     // Fallback search
     const scripts = document.getElementsByTagName('script');
     for (let s of scripts) {
@@ -23,9 +26,11 @@
         } catch (e) { }
       }
     }
-    return `${window.location.protocol}//localhost:5001`;
+    // Default to the user's backend port (9889)
+    return `${window.location.protocol}//localhost:9889`;
   };
   const SERVER_URL = getScriptSource();
+  const VERSION = "1.2.0 (WebSocket Fix)";
 
   // THEME CONFIGURATION
   const scriptTag = document.currentScript || document.querySelector('script[src*="chat-widget.js"]');
@@ -58,8 +63,8 @@
   function addLog(msg) {
     console.log('[ChatWidget]', msg);
   }
-  addLog('Script started [v1.1 Polling Fix]');
-  console.log('%c ChatWidget v1.1 (Polling Fix) Loaded ', 'background: #222; color: #bada55; padding: 4px; border-radius: 4px;');
+  addLog('Script started [v' + VERSION + ']');
+  console.log('%c ChatWidget v' + VERSION + ' Loaded ', 'background: #222; color: #bada55; padding: 4px; border-radius: 4px;');
   addLog('Detected Server: ' + SERVER_URL);
 
   // 3. LAZY SOCKET LOADING
@@ -732,12 +737,12 @@
     function initSocket() {
       addLog('Connecting to socket...');
 
-      // Force polling ONLY to bypass strict firewalls/WAFs that block WebSockets
+      // Allow both WebSockets and Polling for maximum compatibility
       socketInstance = io(SERVER_URL, {
-        transports: ['polling'],
-        upgrade: false, // Disable upgrade to WebSocket
+        transports: ['websocket', 'polling'], // Allow WebSocket upgrade
         reconnectionAttempts: 10,
-        timeout: 20000
+        timeout: 20000,
+        withCredentials: true
       });
 
       socketInstance.on('connect', () => {
