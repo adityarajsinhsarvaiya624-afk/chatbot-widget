@@ -750,25 +750,17 @@
         addLog('Socket Connected! ID: ' + socketInstance.id);
         console.log('ChatWidget: Socket Connected');
         socketInstance.emit('join_conversation', { visitorId });
-
-        // Remove any connection error toasts
-        const existingToast = chatWindow.querySelector('.connection-toast');
-        if (existingToast) existingToast.remove();
       });
 
       socketInstance.on('connect_error', (err) => {
         addLog('Connection Error: ' + err.message);
         console.error('ChatWidget: Socket Connection Error:', err);
 
-        // Show persistent error toast
-        let toast = chatWindow.querySelector('.connection-toast');
-        if (!toast) {
-          toast = document.createElement('div');
-          toast.className = 'connection-toast';
-          toast.style.cssText = "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(220, 38, 38, 0.95);color:white;padding:8px 12px;border-radius:4px;font-size:11px;font-weight:500;z-index:100;text-align:center;width:80%;pointer-events:none;";
-          chatWindow.appendChild(toast);
+        // Show a friendly bot message instead of a technical toast
+        const lastMsg = messagesContainer.lastElementChild;
+        if (!lastMsg || !lastMsg.textContent.includes("experiencing high traffic")) {
+          addMessage("I am currently experiencing high traffic. Please wait a moment.", 'bot');
         }
-        toast.textContent = `Connection Failed: ${err.message}. Retrying...`;
       });
 
       socketInstance.on('chat_history', (history) => {
@@ -850,14 +842,9 @@
 
       // Check purely for connection
       if (!socketInstance || !socketInstance.connected) {
-        addLog('ERROR: Socket not connected. Showing alert.');
+        addLog('ERROR: Socket not connected. Showing bot message.');
 
-        const toast = document.createElement('div');
-        toast.textContent = "Connecting to server... please wait.";
-        toast.style.cssText = "position:absolute;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(255, 69, 0, 0.9);color:white;padding:8px 12px;border-radius:4px;font-size:12px;font-weight:600;opacity:0;transition:opacity 0.3s;pointer-events:none;";
-        chatWindow.appendChild(toast);
-        setTimeout(() => toast.style.opacity = '1', 10);
-        setTimeout(() => toast.remove(), 4000);
+        addMessage("I am currently experiencing high traffic. Please try again in a few seconds.", 'bot');
 
         // Try to trigger connection if it dropped
         if (socketInstance) socketInstance.connect();
