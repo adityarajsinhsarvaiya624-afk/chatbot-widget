@@ -39,10 +39,10 @@ class KnowledgeIndex {
 
             for (const text of textChunks) {
                 const id = this.chunks.length;
-                const chunk = { id, url: page.url, text: text.trim() };
-                this.chunks.push(chunk);
+                // Store as minimal object
+                this.chunks.push({ url: page.url, text: text.trim() });
                 // Index the text with its ID
-                await this.index.addAsync(id, chunk.text);
+                await this.index.addAsync(id, text.trim());
             }
         }
 

@@ -2,7 +2,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 
 // Configuration
-const MAX_PAGES = 500; // Limit pages to avoid long wait times
+const MAX_PAGES = 350; // Limit pages to avoid long wait times
 const TIMEOUT_MS = 30000;
 
 // Helper: Sleep

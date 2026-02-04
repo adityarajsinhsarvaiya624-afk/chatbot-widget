@@ -74,8 +74,18 @@ if (scrapeUrls) {
         for (const [domain, chunks] of siteKnowledgeStore) {
             await knowledgeIndex.addSiteData(chunks);
         }
+
+        // MEMORY OPTIMIZATION: Clear the raw data store once it's indexed
+        siteKnowledgeStore.clear();
+        console.log('[Memory] siteKnowledgeStore cleared after indexing.');
     });
 }
+
+// MEMORY MONITOR: Log RAM usage every 5 minutes
+setInterval(() => {
+    const memory = process.memoryUsage();
+    console.log(`[Status] RAM: ${Math.round(memory.rss / 1024 / 1024)}MB | Heap: ${Math.round(memory.heapUsed / 1024 / 1024)}MB`);
+}, 5 * 60 * 1000);
 
 // --- IN-MEMORY STORAGE ---
 // NOTE: This data is lost when the server restarts.
