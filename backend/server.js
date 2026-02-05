@@ -131,12 +131,10 @@ io.on('connection', (socket) => {
             return;
         }
 
-        console.log(`INFO: join_conversation request for visitorId: ${visitorId}`);
         try {
             let conversation = conversationsStore.get(visitorId);
 
             if (!conversation) {
-                console.log(`INFO: Creating new conversation for visitorId: ${visitorId}`);
                 conversation = {
                     _id: generateId(),
                     visitorId: visitorId,
@@ -146,7 +144,6 @@ io.on('connection', (socket) => {
                 conversationsStore.set(visitorId, conversation);
                 messagesStore.set(conversation._id, []); // Initialize empty message list
             } else {
-                console.log(`INFO: Found existing conversation: ${conversation._id}`);
                 // Update last active
                 conversation.lastActiveAt = new Date();
             }

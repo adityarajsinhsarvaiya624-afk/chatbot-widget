@@ -64,9 +64,6 @@
     visitorId = 'visitor_' + Math.random().toString(36).substr(2, 9);
   }
 
-  function addLog(msg) {
-    // console.log('[ChatWidget]', msg); // Disabled logs
-  }
 
   // 3. LAZY SOCKET LOADING
   let socketInstance = null;
@@ -77,7 +74,6 @@
     const backupDefine = window.define;
     if (window.define) {
       window.define = null;
-      addLog('RequireJS detected. Temporarily disabled "define" for Socket.io load.');
     }
 
     const script = document.createElement('script');
@@ -100,16 +96,13 @@
       callback();
       return;
     }
-    addLog('Loading Socket.io...');
 
-    // Try Local/Server version first (guarantees version match)
+    // Standard sequence: Try local server first (reliability), fallback to CDN
     const localUrl = `${SERVER_URL}/socket.io/socket.io.js`;
 
     loadSocketWithHack(localUrl, callback, () => {
-      addLog('Failed local load, trying CDN...');
       // Fallback to CDN
       loadSocketWithHack('https://cdn.socket.io/4.6.0/socket.io.min.js', callback, () => {
-        addLog('CRITICAL: All Socket.io providers failed to load.');
         console.error('ChatWidget: Could not load socket.io client.');
       });
     });
@@ -117,7 +110,6 @@
 
   // 4. WIDGET INITIALIZATION
   function initWidget() {
-    addLog('Initializing Widget UI...');
 
     // Helper to darken/lighten hex color
     function adjustColor(color, amount) {
@@ -545,7 +537,6 @@
           cdnScript.src = 'https://cdn.socket.io/4.6.0/socket.io.min.js';
           cdnScript.onload = () => {
             if (backupDefine) window.define = backupDefine; // Restore RequireJS
-            addLog('Socket.io loaded from CDN');
             initSocket();
           };
           cdnScript.onerror = () => {
@@ -736,24 +727,21 @@
     }
 
     function initSocket() {
-      addLog('Connecting to socket...');
 
       // Allow both WebSockets and Polling for maximum compatibility
       socketInstance = io(SERVER_URL, {
-        transports: ['websocket', 'polling'], // Allow WebSocket upgrade
+        transports: ['websocket', 'polling'],
         reconnectionAttempts: 10,
         timeout: 20000,
         withCredentials: true
       });
 
       socketInstance.on('connect', () => {
-        addLog('Socket Connected! ID: ' + socketInstance.id);
         console.log('ChatWidget: Socket Connected');
         socketInstance.emit('join_conversation', { visitorId });
       });
 
       socketInstance.on('connect_error', (err) => {
-        addLog('Connection Error: ' + err.message);
         console.error('ChatWidget: Socket Connection Error:', err);
 
         // Show a friendly bot message instead of a technical toast
