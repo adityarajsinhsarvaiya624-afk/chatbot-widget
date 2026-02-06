@@ -728,8 +728,25 @@
 
     function initSocket() {
 
+      // Parse server URL to handle subpaths (e.g., /m-dev/pub/api)
+      let serverOrigin = SERVER_URL;
+      let socketPath = '/socket.io'; // Default
+
+      try {
+        const urlObj = new URL(SERVER_URL);
+        serverOrigin = urlObj.origin;
+        if (urlObj.pathname && urlObj.pathname !== '/') {
+          // Ensure pathname ends without slash, but socket path starts with slash
+          const cleanPath = urlObj.pathname.replace(/\/$/, '');
+          socketPath = `${cleanPath}/socket.io`;
+        }
+      } catch (e) {
+        console.error("ChatWidget: Invalid SERVER_URL", e);
+      }
+
       // Allow both WebSockets and Polling for maximum compatibility
-      socketInstance = io(SERVER_URL, {
+      socketInstance = io(serverOrigin, {
+        path: socketPath,
         transports: ['websocket', 'polling'],
         reconnectionAttempts: 10,
         timeout: 20000,
