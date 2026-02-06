@@ -1,27 +1,22 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { Index } = require('flexsearch');
+const logger = require('../utils/logger');
 
-// Configuration
-const MAX_PAGES = 350; // Limit pages to avoid long wait times
+// --- SCRAPER LOGIC ---
+
+const MAX_PAGES = 350;
 const TIMEOUT_MS = 30000;
 
-// Helper: Sleep
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-/**
- * Extract text and links using Cheerio
- */
 function processHtml(html, baseUrl) {
     const $ = cheerio.load(html);
-
-    // Remove clutter
     $('script, style, noscript, iframe, svg, header, footer, nav').remove();
 
-    // Extract Text
     let text = $('body').text();
-    text = text.replace(/\s+/g, ' ').trim(); // Normalize whitespace
+    text = text.replace(/\s+/g, ' ').trim();
 
-    // Extract Links
     const links = new Set();
     const baseHostname = new URL(baseUrl).hostname;
 
@@ -33,9 +28,7 @@ function processHtml(html, baseUrl) {
             const absoluteUrl = new URL(href, baseUrl).href;
             const linkHostname = new URL(absoluteUrl).hostname;
 
-            // Internal links only, ignore files
             if (linkHostname === baseHostname && !absoluteUrl.match(/\.(jpg|jpeg|png|gif|pdf|zip|css|js)$/i)) {
-                // Remove anchors/hashes
                 const cleanUrl = absoluteUrl.split('#')[0];
                 links.add(cleanUrl);
             }
@@ -45,9 +38,6 @@ function processHtml(html, baseUrl) {
     return { text: text.substring(0, 20000), links: Array.from(links) };
 }
 
-/**
- * Fetch with Axios (Fast Mode)
- */
 async function fetchWithAxios(url) {
     try {
         const response = await axios.get(url, {
@@ -63,7 +53,6 @@ async function fetchWithAxios(url) {
             }
         });
 
-        // Basic check if it's likely a SPA/Empty page
         if (response.data.length < 500 || response.data.includes('You need to enable JavaScript')) {
             throw new Error('Likely Dynamic Content');
         }
@@ -74,26 +63,24 @@ async function fetchWithAxios(url) {
     }
 }
 
-/**
- * Main Crawl Function
- */
 async function crawlSite(startUrl) {
     const chunks = [];
     const visited = new Set();
     const queue = [startUrl];
     let count = 0;
 
-    console.log(`[Crawler] Starting lightweight crawl of ${startUrl}`);
+    logger.info(`[Crawler] Starting lightweight crawl of ${startUrl}`);
 
     while (queue.length > 0 && count < MAX_PAGES) {
         const url = queue.shift();
-
         const normalizedUrl = url.replace(/\/$/, "");
         if (visited.has(normalizedUrl)) continue;
         visited.add(normalizedUrl);
 
         count++;
+        // logger.debug(`[Crawler] Visiting (${count}/${MAX_PAGES}): ${url}`);
         console.log(`[Crawler] Visiting (${count}/${MAX_PAGES}): ${url}`);
+
 
         let html = "";
         let method = "";
@@ -103,18 +90,14 @@ async function crawlSite(startUrl) {
             html = res.html;
             method = res.method;
         } catch (axiosErr) {
-            console.error(`[Crawler] Failed to fetch ${url}: ${axiosErr.message}`);
+            logger.error(`[Crawler] Failed to fetch ${url}: ${axiosErr.message}`);
         }
 
         if (html) {
             const { text, links } = processHtml(html, startUrl);
-
-            // Add as a chunk
             if (text.length > 50) {
-                chunks.push({ url, text: text.substring(0, 5000), method }); // Keep a reasonable per-page limit
+                chunks.push({ url, text: text.substring(0, 5000), method });
             }
-
-            // Add new links to queue
             for (const link of links) {
                 const normLink = link.replace(/\/$/, "");
                 if (!visited.has(normLink)) {
@@ -124,7 +107,7 @@ async function crawlSite(startUrl) {
         }
     }
 
-    console.log(`[Crawler] Finished. Visited: ${count}. Total chunks: ${chunks.length}`);
+    logger.info(`[Crawler] Finished. Visited: ${count}. Total chunks: ${chunks.length}`);
     return chunks;
 }
 
@@ -140,10 +123,72 @@ async function scrapeSites(urlsStr) {
             const content = await crawlSite(url);
             results.set(domain, content);
         } catch (error) {
-            console.error(`[Scraper] Fatal error scraping ${url}:`, error.message);
+            logger.error(`[Scraper] Fatal error scraping ${url}:`, error.message);
         }
     }
     return results;
 }
 
-module.exports = { scrapeSites };
+// --- INDEXING LOGIC ---
+
+class KnowledgeIndex {
+    constructor() {
+        this.index = new Index({
+            preset: 'score',
+            tokenize: 'forward',
+            cache: true
+        });
+        this.chunks = [];
+    }
+
+    splitText(text, size, overlap) {
+        const chunks = [];
+        let start = 0;
+        while (start < text.length) {
+            chunks.push(text.substring(start, start + size));
+            start += (size - overlap);
+        }
+        return chunks;
+    }
+
+    async addSiteData(siteData) {
+        logger.info(`[RAG] Indexing ${siteData.length} site pages...`);
+        for (const page of siteData) {
+            const textChunks = this.splitText(page.text, 1000, 200);
+            for (const text of textChunks) {
+                const id = this.chunks.length;
+                this.chunks.push({ url: page.url, text: text.trim() });
+                await this.index.addAsync(id, text.trim());
+            }
+        }
+        logger.info(`[RAG] Knowledge base ready. Total indexed segments: ${this.chunks.length}`);
+    }
+
+    async search(query, limit = 5) {
+        const results = await this.index.searchAsync(query, { limit: limit * 2 });
+        const uniqueChunks = new Set();
+        const output = [];
+
+        for (const id of results) {
+            const chunk = this.chunks[id];
+            if (chunk && !uniqueChunks.has(chunk.text.substring(0, 50))) {
+                uniqueChunks.add(chunk.text.substring(0, 50));
+                output.push(chunk);
+            }
+            if (output.length >= limit) break;
+        }
+        return output;
+    }
+
+    formatContext(relevantChunks) {
+        if (!relevantChunks || relevantChunks.length === 0) return "(No relevant data found in search)";
+        return relevantChunks.map(c => `[SOURCE: ${c.url}]\n${c.text}`).join('\n\n---\n\n');
+    }
+}
+
+const knowledgeIndex = new KnowledgeIndex();
+
+module.exports = {
+    scrapeSites,
+    knowledgeIndex
+};

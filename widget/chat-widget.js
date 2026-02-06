@@ -830,7 +830,6 @@
 
       // Check purely for connection
       if (!socketInstance || !socketInstance.connected) {
-        addLog('ERROR: Socket not connected. Showing bot message.');
 
         addMessage("I am currently experiencing high traffic. Please try again in a few seconds.", 'bot');
 
@@ -894,8 +893,7 @@
     } else {
       initWidget();
     }
-    addLog('Init sequence triggered');
   } catch (err) {
-    addLog('CRITICAL INIT ERROR: ' + err.message);
+    console.error('CRITICAL INIT ERROR: ' + err.message);
   }
 })();
